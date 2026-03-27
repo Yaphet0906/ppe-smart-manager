@@ -1,0 +1,283 @@
+[
+  {
+    "level": "MEDIUM",
+    "category": "architecture",
+    "file": "LICENSE",
+    "issue": "缺少开源许可证文件",
+    "impact": "GitHub项目建议包含LICENSE文件",
+    "fix": "添加MIT许可证文件"
+  },
+  {
+    "level": "MEDIUM",
+    "category": "architecture",
+    "file": "backend/tests/",
+    "issue": "缺少测试目录结构",
+    "impact": "不符合CI/CD要求，无法运行自动化测试",
+    "fix": "创建tests目录，添加测试文件"
+  },
+  {
+    "level": "LOW",
+    "category": "architecture",
+    "file": "frontend/public/",
+    "issue": "缺少public目录",
+    "impact": "无法存放静态资源如favicon、icons等",
+    "fix": "创建public目录，添加PWA所需图标"
+  },
+  {
+    "level": "LOW",
+    "category": "architecture",
+    "file": "Dockerfile",
+    "issue": "缺少Docker配置文件",
+    "impact": "不利于容器化部署",
+    "fix": "添加Dockerfile和docker-compose.yml"
+  },
+  {
+    "level": "HIGH",
+    "issue": "User模型字段与数据库不一致",
+    "detail": "模型使用'password'，数据库使用'password_hash'",
+    "fix": "统一字段名，建议使用'password_hash'"
+  },
+  {
+    "level": "HIGH",
+    "category": "backend",
+    "file": "backend/src/models/User.js",
+    "issue": "User模型字段与数据库schema不一致",
+    "detail": "模型使用'password'字段，数据库使用'password_hash'字段",
+    "impact": "会导致用户创建/登录失败",
+    "fix": "修改User模型的create和findByPhone方法，使用'password_hash'字段"
+  },
+  {
+    "level": "MEDIUM",
+    "category": "backend",
+    "file": "backend/src/models/InboundRecord.js",
+    "issue": "入库记录表缺少入库单号字段",
+    "detail": "数据库schema中inbound_records表没有inbound_no字段，但模型使用",
+    "impact": "会导致入库记录创建失败",
+    "fix": "在数据库schema中添加inbound_no字段，或修改模型"
+  },
+  {
+    "level": "MEDIUM",
+    "category": "backend",
+    "file": "backend/package.json",
+    "issue": "test脚本指向错误的测试文件",
+    "detail": "test脚本运行的是test_xunfei.js，应该是正式的测试套件",
+    "impact": "CI/CD无法运行正确的测试",
+    "fix": "创建正式的测试目录和测试文件，更新test脚本"
+  },
+  {
+    "level": "LOW",
+    "category": "backend",
+    "file": "backend/src/index.js",
+    "issue": "缺少请求限流保护",
+    "detail": "没有配置express-rate-limit",
+    "impact": "可能受到DDoS攻击",
+    "fix": "添加express-rate-limit中间件"
+  },
+  {
+    "level": "LOW",
+    "category": "backend",
+    "file": "backend/src/index.js",
+    "issue": "缺少Helmet安全头",
+    "detail": "没有配置helmet中间件",
+    "impact": "安全风险",
+    "fix": "添加helmet中间件"
+  },
+  {
+    "level": "MEDIUM",
+    "category": "frontend",
+    "file": "frontend/src/main.jsx",
+    "issue": "PWA service worker注册指向不存在的sw.js文件",
+    "detail": "navigator.serviceWorker.register('/sw.js')但项目没有sw.js文件",
+    "impact": "PWA功能无法正常工作",
+    "fix": "创建public/sw.js文件或使用Workbox生成"
+  },
+  {
+    "level": "HIGH",
+    "category": "frontend",
+    "file": "frontend/src/utils/api.js",
+    "issue": "API端点与后端路由不匹配",
+    "detail": "前端使用AUTH.LOGIN = '/auth/login'，但后端路由是POST /api/users/login",
+    "impact": "登录功能无法正常工作",
+    "fix": "修改API_ENDPOINTS.AUTH.LOGIN为'/users/login'"
+  },
+  {
+    "level": "MEDIUM",
+    "category": "frontend",
+    "file": "frontend/package.json",
+    "issue": "缺少test脚本",
+    "detail": "package.json中没有配置test脚本",
+    "impact": "无法运行单元测试",
+    "fix": "添加test脚本，配置测试框架如vitest或jest"
+  },
+  {
+    "level": "LOW",
+    "category": "frontend",
+    "file": "frontend/vite.config.ts",
+    "issue": "PWA manifest图标路径可能不存在",
+    "detail": "manifest配置引用/icon-192x192.png和/icon-512x512.png",
+    "impact": "PWA安装时可能没有图标",
+    "fix": "在public目录下添加PWA图标文件"
+  },
+  {
+    "level": "LOW",
+    "category": "frontend",
+    "file": "frontend/src/main.jsx",
+    "issue": "双击缩放禁用代码可能过于激进",
+    "detail": "touchstart事件阻止默认行为可能影响正常滚动",
+    "impact": "可能影响用户体验",
+    "fix": "优化双击缩放禁用逻辑"
+  },
+  {
+    "level": "MEDIUM",
+    "category": "devops",
+    "file": "Dockerfile",
+    "issue": "缺少Dockerfile",
+    "detail": "项目没有Dockerfile，无法容器化部署",
+    "impact": "无法使用Docker部署",
+    "fix": "创建Dockerfile和.dockerignore文件"
+  },
+  {
+    "level": "MEDIUM",
+    "category": "devops",
+    "file": "backend/database/",
+    "issue": "缺少数据库迁移工具",
+    "detail": "项目使用原始SQL文件，没有使用迁移工具如knex或sequelize-cli",
+    "impact": "数据库版本管理困难",
+    "fix": "添加数据库迁移工具配置"
+  },
+  {
+    "level": "LOW",
+    "category": "devops",
+    "file": "backend/src/index.js",
+    "issue": "日志输出到控制台，没有文件日志",
+    "detail": "生产环境应该将日志写入文件",
+    "impact": "不便于生产环境排查问题",
+    "fix": "添加日志库如winston或pino"
+  },
+  {
+    "level": "MEDIUM",
+    "category": "devops",
+    "file": "backend/package.json",
+    "issue": "缺少生产环境启动脚本优化",
+    "detail": "生产环境建议使用pm2或类似工具管理Node进程",
+    "impact": "进程崩溃后不会自动重启",
+    "fix": "添加pm2配置文件ecosystem.config.js"
+  },
+  {
+    "level": "LOW",
+    "category": "devops",
+    "file": "frontend/",
+    "issue": "缺少nginx配置示例",
+    "detail": "生产环境部署需要nginx配置",
+    "impact": "需要自己编写nginx配置",
+    "fix": "添加nginx.conf示例文件"
+  },
+  {
+    "level": "LOW",
+    "category": "devops",
+    "file": "docker-compose.yml",
+    "issue": "缺少docker-compose配置",
+    "detail": "没有docker-compose.yml文件",
+    "impact": "本地开发环境搭建复杂",
+    "fix": "添加docker-compose.yml配置"
+  },
+  {
+    "level": "CRITICAL",
+    "category": "security",
+    "file": "backend/src/controllers/userController.js:37",
+    "issue": "密码使用明文比较",
+    "detail": "if (user.password !== password) - 密码没有使用bcrypt等加密",
+    "impact": "用户密码泄露风险极高",
+    "fix": "使用bcrypt对密码进行哈希存储和比较"
+  },
+  {
+    "level": "HIGH",
+    "category": "security",
+    "file": "backend/src/controllers/userController.js:52",
+    "issue": "JWT Token实现不安全",
+    "detail": "token: `token_${user.id}_${Date.now()}` - 简单字符串拼接，没有使用JWT库",
+    "impact": "Token可以被伪造",
+    "fix": "使用jsonwebtoken库生成和验证JWT"
+  },
+  {
+    "level": "MEDIUM",
+    "category": "security",
+    "file": "backend/src/index.js:29-33",
+    "issue": "CORS配置过于宽松",
+    "detail": "origin: process.env.CORS_ORIGIN || '*' - 允许所有来源",
+    "impact": "可能存在CSRF攻击风险",
+    "fix": "生产环境应配置具体的允许域名"
+  },
+  {
+    "level": "MEDIUM",
+    "category": "security",
+    "file": "backend/src/index.js",
+    "issue": "缺少XSS防护中间件",
+    "detail": "没有配置xss-clean或类似中间件",
+    "impact": "可能存在XSS攻击风险",
+    "fix": "添加xss-clean中间件"
+  },
+  {
+    "level": "MEDIUM",
+    "category": "security",
+    "file": "backend/src/index.js",
+    "issue": "缺少请求限流",
+    "detail": "没有配置express-rate-limit",
+    "impact": "可能受到暴力破解和DDoS攻击",
+    "fix": "添加express-rate-limit中间件"
+  },
+  {
+    "level": "MEDIUM",
+    "category": "security",
+    "file": "backend/src/index.js",
+    "issue": "缺少安全头配置",
+    "detail": "没有使用helmet中间件",
+    "impact": "缺少X-Frame-Options、X-XSS-Protection等安全头",
+    "fix": "添加helmet中间件"
+  },
+  {
+    "level": "HIGH",
+    "category": "testing",
+    "file": "backend/tests/",
+    "issue": "完全没有测试文件",
+    "detail": "backend和frontend都没有测试目录和测试文件",
+    "impact": "无法验证功能正确性，CI/CD无法通过",
+    "fix": "创建测试目录，添加单元测试和集成测试"
+  },
+  {
+    "level": "MEDIUM",
+    "category": "testing",
+    "file": "tests/integration/",
+    "issue": "缺少集成测试",
+    "detail": "没有端到端的集成测试",
+    "impact": "无法验证完整业务流程",
+    "fix": "添加集成测试，覆盖主要业务流程"
+  },
+  {
+    "level": "HIGH",
+    "category": "testing",
+    "file": "backend/package.json",
+    "issue": "test脚本指向错误的文件",
+    "detail": "test: node src/utils/test_xunfei.js - 这不是正式的测试",
+    "impact": "CI/CD运行的是错误的测试",
+    "fix": "修改test脚本指向真正的测试套件"
+  },
+  {
+    "level": "MEDIUM",
+    "category": "testing",
+    "file": "backend/package.json",
+    "issue": "缺少测试框架依赖",
+    "detail": "没有安装jest、mocha或vitest等测试框架",
+    "impact": "无法编写和运行测试",
+    "fix": "安装测试框架并配置测试环境"
+  },
+  {
+    "level": "LOW",
+    "category": "testing",
+    "file": "backend/",
+    "issue": "缺少测试覆盖率工具",
+    "detail": "没有配置nyc或jest coverage",
+    "impact": "无法知道测试覆盖率",
+    "fix": "添加测试覆盖率工具配置"
+  }
+]
