@@ -9,6 +9,7 @@ import Alerts from '../views/Alerts.vue';
 import QuickOutbound from '../views/QuickOutbound.vue';
 import QRCodeManage from '../views/QRCodeManage.vue';
 import OCRInbound from '../views/OCRInbound.vue';
+import ChangePassword from '../views/ChangePassword.vue';
 
 const routes = [
   {
@@ -22,6 +23,12 @@ const routes = [
     name: 'QuickOutbound',
     component: QuickOutbound,
     meta: { public: true, title: '扫码领用' }
+  },
+  {
+    path: '/change-password',
+    name: 'ChangePassword',
+    component: ChangePassword,
+    meta: { public: true, title: '修改密码' }
   },
   {
     path: '/',

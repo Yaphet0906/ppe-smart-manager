@@ -182,8 +182,15 @@ export default {
         if (res.code === 200) {
           userStore.setToken(res.data.token);
           userStore.setUserInfo(res.data.userInfo);
-          ElMessage.success('登录成功');
-          router.push('/dashboard');
+          
+          // 检查是否首次登录
+          if (res.data.isFirstLogin) {
+            ElMessage.warning('首次登录，请修改密码');
+            router.push('/change-password');
+          } else {
+            ElMessage.success('登录成功');
+            router.push('/dashboard');
+          }
         } else {
           ElMessage.error(res.msg || '登录失败');
         }

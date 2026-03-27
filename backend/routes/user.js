@@ -20,7 +20,7 @@ router.post('/login', async (req, res) => {
     
     // 查询用户（带公司隔离）
     const [users] = await pool.query(
-      'SELECT u.*, c.name as company_name, c.code as company_code FROM users u JOIN companies c ON u.company_id = c.id WHERE u.phone = ? AND u.company_id = ? AND u.deleted_at IS NULL', 
+      'SELECT u.*, c.name as company_name, c.code as company_code FROM users u JOIN companies c ON u.company_id = c.id WHERE u.phone = ? AND u.company_id = ? AND u.deleted_at IS NULL',
       [phone, company.id]
     );
     
@@ -56,6 +56,7 @@ router.post('/login', async (req, res) => {
       msg: '登录成功',
       data: {
         token,
+        isFirstLogin: user.is_first_login === 1,
         userInfo: {
           id: user.id,
           name: user.name,
@@ -221,6 +222,55 @@ router.get('/public-ppe-list', async (req, res) => {
     res.json({ code: 200, data: items });
   } catch (error) {
     console.error('获取物品列表失败：', error);
+    res.json({ code: 500, msg: '服务器错误' });
+  }
+});
+
+// 修改密码（首次登录或主动修改）
+router.post('/change-password', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.json({ code: 401, msg: '未登录' });
+    }
+
+    const decoded = jwt.verify(token, SECRET_KEY);
+    const { oldPassword, newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 6) {
+      return res.json({ code: 400, msg: '新密码至少6位' });
+    }
+
+    // 查询用户
+    const [users] = await pool.query(
+      'SELECT * FROM users WHERE id = ? AND company_id = ?',
+      [decoded.id, decoded.companyId]
+    );
+
+    if (users.length === 0) {
+      return res.json({ code: 404, msg: '用户不存在' });
+    }
+
+    const user = users[0];
+
+    // 验证旧密码（如果不是首次登录）
+    if (user.is_first_login === 0) {
+      const isValid = await bcrypt.compare(oldPassword, user.password);
+      if (!isValid) {
+        return res.json({ code: 401, msg: '原密码错误' });
+      }
+    }
+
+    // 更新密码
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await pool.query(
+      'UPDATE users SET password = ?, is_first_login = 0 WHERE id = ?',
+      [hashedPassword, user.id]
+    );
+
+    res.json({ code: 200, msg: '密码修改成功' });
+  } catch (error) {
+    console.error('修改密码失败：', error);
     res.json({ code: 500, msg: '服务器错误' });
   }
 });

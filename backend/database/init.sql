@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS users (
   role ENUM('admin', 'manager', 'employee') DEFAULT 'employee' COMMENT '角色',
   department VARCHAR(100) COMMENT '部门',
   employee_no VARCHAR(50) COMMENT '工号',
+  is_first_login TINYINT(1) DEFAULT 1 COMMENT '是否首次登录（1是，0否）',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   deleted_at DATETIME DEFAULT NULL COMMENT '删除时间（软删除）',
