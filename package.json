@@ -2,7 +2,7 @@
   "name": "ppe-smart-manager",
   "version": "1.0.0",
   "private": true,
-  "homepage": "https://你的GitHub用户名.github.io/ppe-smart-manager/",
+  "homepage": "https://yaphet0906.github.io/ppe-smart-manager/",
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
