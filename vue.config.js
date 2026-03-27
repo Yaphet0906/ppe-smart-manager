@@ -1,9 +1,18 @@
 const { defineConfig } = require('@vue/cli-service');
+const path = require('path');
 module.exports = defineConfig({
   // 适配GitHub Pages路径
   publicPath: process.env.NODE_ENV === 'production' 
     ? '/ppe-smart-manager/' // 必须和仓库名一致
     : '/',
+  // 指定源代码目录
+  pages: {
+    index: {
+      entry: 'frontend/src/main.js',
+      template: 'frontend/public/index.html',
+      filename: 'index.html'
+    }
+  },
   outputDir: 'dist',
   assetsDir: 'static',
   lintOnSave: false,

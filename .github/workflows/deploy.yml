@@ -23,20 +23,16 @@ jobs:
         cache: 'npm'
         
     - name: Install dependencies
-      run: |
-        cd frontend
-        npm install
+      run: npm install
       
     - name: Build
-      run: |
-        cd frontend
-        npm run build
+      run: npm run build
       
     - name: Deploy to GitHub Pages
       uses: JamesIves/github-pages-deploy-action@v4
       if: github.ref == 'refs/heads/main'
       with:
-        folder: frontend/dist
+        folder: dist
         branch: gh-pages
         clean: true
         token: ${{ secrets.GITHUB_TOKEN }}
