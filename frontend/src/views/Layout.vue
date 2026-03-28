@@ -27,6 +27,18 @@
           <el-icon><Upload /></el-icon>
           <span>出库</span>
         </el-menu-item>
+        <el-menu-item index="/ocr-inbound">
+          <el-icon><Camera /></el-icon>
+          <span>截图入库</span>
+        </el-menu-item>
+        <el-menu-item index="/qrcode">
+          <el-icon><FullScreen /></el-icon>
+          <span>二维码</span>
+        </el-menu-item>
+        <el-menu-item index="/data-export">
+          <el-icon><Download /></el-icon>
+          <span>数据导出</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -57,12 +69,12 @@
 <script>
 import { useRouter } from 'vue-router';
 import { useUserStore } from '../store';
-import { HomeFilled, Box, Download, Upload, ArrowDown } from '@element-plus/icons-vue';
+import { HomeFilled, Box, Download, Upload, ArrowDown, Camera, FullScreen } from '@element-plus/icons-vue';
 
 export default {
   name: 'Layout',
   components: {
-    HomeFilled, Box, Download, Upload, ArrowDown
+    HomeFilled, Box, Download, Upload, ArrowDown, Camera, FullScreen
   },
   setup() {
     const router = useRouter();

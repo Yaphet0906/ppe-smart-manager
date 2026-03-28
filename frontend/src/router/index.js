@@ -9,6 +9,7 @@ import OCRInbound from '../views/OCRInbound.vue';
 import QRCodeManage from '../views/QRCodeManage.vue';
 import QuickOutbound from '../views/QuickOutbound.vue';
 import ChangePassword from '../views/ChangePassword.vue';
+import DataExport from '../views/DataExport.vue';
 
 const routes = [
   {
@@ -63,6 +64,11 @@ const routes = [
         path: 'qrcode',
         name: 'QRCodeManage',
         component: QRCodeManage
+      },
+      {
+        path: 'data-export',
+        name: 'DataExport',
+        component: DataExport
       }
     ]
   }
