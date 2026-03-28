@@ -2,9 +2,7 @@ const { defineConfig } = require('@vue/cli-service');
 const path = require('path');
 module.exports = defineConfig({
   // 适配GitHub Pages路径
-  publicPath: process.env.NODE_ENV === 'production' 
-    ? '/ppe-smart-manager/' // 必须和仓库名一致
-    : '/',
+  publicPath: '/',
   // 指定源代码目录
   pages: {
     index: {
@@ -23,9 +21,10 @@ module.exports = defineConfig({
     open: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001', // 后端新端口3001
+        target: 'http://localhost:3001',
         changeOrigin: true,
-        pathRewrite: { '^/api': '' }
+        pathRewrite: { '^/api': '' },
+        logLevel: 'debug'
       }
     }
   }

@@ -17,9 +17,19 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// 请求日志中间件
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
 // 路由挂载（示例）
 app.use('/api/user', require('./routes/user'));
 app.use('/api/ppe', require('./routes/ppe'));
+
+// 为了兼容前端直接请求，也挂载到根路径
+app.use('/user', require('./routes/user'));
+app.use('/ppe', require('./routes/ppe'));
 
 // 全局错误处理中间件
 app.use((err, req, res, next) => {

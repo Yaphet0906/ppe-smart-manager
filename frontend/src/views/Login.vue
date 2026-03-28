@@ -3,7 +3,7 @@
     <el-card class="login-card">
       <template #header>
         <h2 class="login-title">PPE智能管理系统</h2>
-        <p class="login-subtitle">劳保用品库存管理</p>
+        <p class="login-subtitle">劳动防护用品库存管理</p>
       </template>
       
       <el-form :model="form" :rules="rules" ref="loginForm" label-position="top">
@@ -88,6 +88,7 @@
 
 <script>
 import { reactive, ref, onMounted, onUnmounted } from 'vue';
+import { ElMessage } from 'element-plus';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '../store';
 import request from '../utils/request';

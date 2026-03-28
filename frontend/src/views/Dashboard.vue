@@ -11,7 +11,7 @@
             </div>
             <div class="stat-info">
               <div class="stat-value">{{ stats.total }}</div>
-              <div class="stat-label">PPE设备总数</div>
+              <div class="stat-label">用品总数</div>
             </div>
           </div>
         </el-card>

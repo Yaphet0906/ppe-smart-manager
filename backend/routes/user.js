@@ -11,17 +11,17 @@ router.post('/login', async (req, res) => {
   try {
     const { companyCode, phone, password } = req.body;
     
-    // 先查询公司
-    const [companies] = await pool.query('SELECT * FROM companies WHERE code = ? AND status = "active"', [companyCode]);
-    if (companies.length === 0) {
+    // 先查询租户
+    const [tenants] = await pool.query('SELECT * FROM core_tenants WHERE code = ? AND status = 1', [companyCode]);
+    if (tenants.length === 0) {
       return res.json({ code: 401, msg: '公司代码不存在' });
     }
-    const company = companies[0];
+    const tenant = tenants[0];
     
-    // 查询用户（带公司隔离）
+    // 查询用户（带租户隔离）
     const [users] = await pool.query(
-      'SELECT u.*, c.name as company_name, c.code as company_code FROM users u JOIN companies c ON u.company_id = c.id WHERE u.phone = ? AND u.company_id = ? AND u.deleted_at IS NULL',
-      [phone, company.id]
+      'SELECT u.*, t.name as company_name, t.code as company_code FROM core_users u JOIN core_tenants t ON u.tenant_id = t.id WHERE u.phone = ? AND u.tenant_id = ? AND u.deleted_at IS NULL',
+      [phone, tenant.id]
     );
     
     if (users.length === 0) {
@@ -43,7 +43,7 @@ router.post('/login', async (req, res) => {
         phone: user.phone, 
         name: user.name,
         role: user.role,
-        companyId: user.company_id,
+        companyId: user.tenant_id,
         companyCode: user.company_code,
         companyName: user.company_name
       },
@@ -62,7 +62,7 @@ router.post('/login', async (req, res) => {
           name: user.name,
           phone: user.phone,
           role: user.role,
-          companyId: user.company_id,
+          companyId: user.tenant_id,
           companyCode: user.company_code,
           companyName: user.company_name
         }
@@ -98,23 +98,23 @@ router.post('/register-company', async (req, res) => {
     const { companyName, companyCode, contactName, contactPhone, adminPassword } = req.body;
     
     // 检查公司代码是否已存在
-    const [existing] = await pool.query('SELECT id FROM companies WHERE code = ?', [companyCode]);
+    const [existing] = await pool.query('SELECT id FROM core_tenants WHERE code = ?', [companyCode]);
     if (existing.length > 0) {
       return res.json({ code: 400, msg: '公司代码已存在' });
     }
     
-    // 创建公司
-    const [companyResult] = await pool.query(
-      'INSERT INTO companies (name, code, contact_name, contact_phone, status) VALUES (?, ?, ?, ?, "active")',
+    // 创建租户
+    const [tenantResult] = await pool.query(
+      'INSERT INTO core_tenants (name, code, contact_name, contact_phone, status) VALUES (?, ?, ?, ?, 1)',
       [companyName, companyCode, contactName, contactPhone]
     );
-    const companyId = companyResult.insertId;
+    const tenantId = tenantResult.insertId;
     
     // 创建管理员账号
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
     await pool.query(
-      'INSERT INTO users (company_id, name, phone, password, role, department) VALUES (?, ?, ?, ?, "admin", "管理部")',
-      [companyId, contactName, contactPhone, hashedPassword]
+      'INSERT INTO core_users (tenant_id, name, phone, password, role, department) VALUES (?, ?, ?, ?, "admin", "管理部")',
+      [tenantId, contactName, contactPhone, hashedPassword]
     );
     
     res.json({
@@ -137,16 +137,16 @@ router.post('/quick-outbound', async (req, res) => {
   try {
     const { companyCode, employeeName, employeePhone, ppeId, quantity, purpose } = req.body;
     
-    // 查询公司
-    const [companies] = await pool.query('SELECT id FROM companies WHERE code = ? AND status = "active"', [companyCode]);
-    if (companies.length === 0) {
+    // 查询租户
+    const [tenants] = await pool.query('SELECT id FROM core_tenants WHERE code = ? AND status = 1', [companyCode]);
+    if (tenants.length === 0) {
       return res.json({ code: 400, msg: '公司代码无效' });
     }
-    const companyId = companies[0].id;
+    const tenantId = tenants[0].id;
     
     // 查询物品
     const [items] = await pool.query(
-      'SELECT * FROM ppe_items WHERE id = ? AND company_id = ?',
+      'SELECT * FROM inv_items WHERE id = ? AND tenant_id = ?',
       [ppeId, companyId]
     );
     if (items.length === 0) {
@@ -243,7 +243,7 @@ router.post('/change-password', async (req, res) => {
 
     // 查询用户
     const [users] = await pool.query(
-      'SELECT * FROM users WHERE id = ? AND company_id = ?',
+      'SELECT * FROM core_users WHERE id = ? AND tenant_id = ?',
       [decoded.id, decoded.companyId]
     );
 
@@ -264,7 +264,7 @@ router.post('/change-password', async (req, res) => {
     // 更新密码
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await pool.query(
-      'UPDATE users SET password = ?, is_first_login = 0 WHERE id = ?',
+      'UPDATE core_users SET password = ?, is_first_login = 0 WHERE id = ?',
       [hashedPassword, user.id]
     );
 

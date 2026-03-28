@@ -4,8 +4,8 @@
     
     <el-card class="outbound-form">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
-        <el-form-item label="选择设备" prop="ppeId">
-          <el-select v-model="form.ppeId" placeholder="请选择设备" style="width: 100%">
+        <el-form-item label="选择用品" prop="ppeId">
+          <el-select v-model="form.ppeId" placeholder="请选择用品" style="width: 100%">
             <el-option 
               v-for="item in ppeList" 
               :key="item.id" 
@@ -23,6 +23,10 @@
         <el-form-item label="领用人" prop="receiver">
           <el-input v-model="form.receiver" placeholder="请输入领用人姓名" />
         </el-form-item>
+
+        <el-form-item label="手机号" prop="phone">
+          <el-input v-model="form.phone" placeholder="请输入11位手机号" maxlength="11" />
+        </el-form-item>
         
         <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" type="textarea" rows="3" />
@@ -39,9 +43,10 @@
     <el-card>
       <el-table :data="recordList" v-loading="loading" border>
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="ppeName" label="设备名称" />
+        <el-table-column prop="ppeName" label="用品名称" />
         <el-table-column prop="quantity" label="出库数量" width="100" />
-        <el-table-column prop="receiver" label="领用人" width="120" />
+        <el-table-column prop="receiver" label="领用人" width="100" />
+        <el-table-column prop="phone" label="手机号" width="120" />
         <el-table-column prop="remark" label="备注" show-overflow-tooltip />
         <el-table-column prop="createTime" label="出库时间" width="180" />
       </el-table>
@@ -65,13 +70,18 @@ export default {
       ppeId: null,
       quantity: 1,
       receiver: '',
+      phone: '',
       remark: ''
     });
     
     const rules = {
-      ppeId: [{ required: true, message: '请选择设备', trigger: 'change' }],
+      ppeId: [{ required: true, message: '请选择用品', trigger: 'change' }],
       quantity: [{ required: true, message: '请输入出库数量', trigger: 'blur' }],
-      receiver: [{ required: true, message: '请输入领用人', trigger: 'blur' }]
+      receiver: [{ required: true, message: '请输入领用人', trigger: 'blur' }],
+      phone: [
+        { required: true, message: '请输入手机号', trigger: 'blur' },
+        { pattern: /^1\d{10}$/, message: '手机号必须为11位数字', trigger: 'blur' }
+      ]
     };
     
     const fetchPPEList = async () => {

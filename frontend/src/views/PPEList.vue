@@ -1,14 +1,30 @@
 <template>
   <div class="ppe-list">
     <div class="page-header">
-      <h3>PPE设备管理</h3>
-      <el-button type="primary" @click="handleAdd">新增设备</el-button>
+      <h3>库存管理</h3>
+      <el-button type="primary" @click="handleAdd">新增用品</el-button>
     </div>
-    
+
+    <!-- 仓库选择器 -->
+    <el-card style="margin-bottom: 20px;">
+      <div class="warehouse-selector">
+        <span class="label">当前仓库：</span>
+        <el-select v-model="currentWarehouseId" placeholder="请选择仓库" style="width: 200px; margin-right: 10px;">
+          <el-option
+            v-for="warehouse in warehouseList"
+            :key="warehouse.id"
+            :label="warehouse.name"
+            :value="warehouse.id"
+          />
+        </el-select>
+        <el-button type="success" size="small" @click="showAddWarehouse = true">+ 添加仓库</el-button>
+      </div>
+    </el-card>
+
     <el-card>
       <el-table :data="tableData" v-loading="loading" border>
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="name" label="设备名称" />
+        <el-table-column prop="name" label="用品名称" />
         <el-table-column prop="type" label="类型" width="120" />
         <el-table-column prop="stock" label="库存数量" width="100">
           <template #default="{ row }">
@@ -30,11 +46,11 @@
         </el-table-column>
       </el-table>
     </el-card>
-    
-    <!-- 新增/编辑对话框 -->
+
+    <!-- 新增/编辑用品对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="80px">
-        <el-form-item label="设备名称" prop="name">
+        <el-form-item label="用品名称" prop="name">
           <el-input v-model="form.name" />
         </el-form-item>
         <el-form-item label="类型" prop="type">
@@ -55,11 +71,31 @@
         <el-button type="primary" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 添加仓库对话框 -->
+    <el-dialog v-model="showAddWarehouse" title="添加仓库" width="400px">
+      <el-form :model="warehouseForm" ref="warehouseRef" label-width="80px">
+        <el-form-item label="仓库编号" prop="code" required>
+          <el-input v-model="warehouseForm.code" placeholder="如：A01" />
+        </el-form-item>
+        <el-form-item label="仓库名称" prop="name" required>
+          <el-input v-model="warehouseForm.name" placeholder="如：主仓库" />
+        </el-form-item>
+        <el-form-item label="位置" prop="location">
+          <el-input v-model="warehouseForm.location" placeholder="如：一楼东侧" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showAddWarehouse = false">取消</el-button>
+        <el-button type="primary" @click="handleAddWarehouse">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script>
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, ref, onMounted, watch } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import request from '../utils/request';
 
 export default {
@@ -67,25 +103,50 @@ export default {
   setup() {
     const loading = ref(false);
     const tableData = ref([]);
+    const warehouseList = ref([]);
+    const currentWarehouseId = ref(null);
     const dialogVisible = ref(false);
-    const dialogTitle = ref('新增设备');
+    const showAddWarehouse = ref(false);
+    const dialogTitle = ref('新增用品');
     const formRef = ref(null);
+    const warehouseRef = ref(null);
     const isEdit = ref(false);
-    
+
     const form = reactive({
       id: null,
       name: '',
       type: '',
       stock: 0
     });
-    
+
+    const warehouseForm = reactive({
+      code: '',
+      name: '',
+      location: ''
+    });
+
     const rules = {
-      name: [{ required: true, message: '请输入设备名称', trigger: 'blur' }],
+      name: [{ required: true, message: '请输入用品名称', trigger: 'blur' }],
       type: [{ required: true, message: '请选择类型', trigger: 'change' }],
       stock: [{ required: true, message: '请输入库存数量', trigger: 'blur' }]
     };
-    
+
+    const fetchWarehouses = async () => {
+      try {
+        const res = await request.get('/ppe/warehouse-list');
+        if (res.code === 200) {
+          warehouseList.value = res.data;
+          if (res.data.length > 0 && !currentWarehouseId.value) {
+            currentWarehouseId.value = res.data[0].id;
+          }
+        }
+      } catch (error) {
+        console.error('获取仓库列表失败:', error);
+      }
+    };
+
     const fetchData = async () => {
+      if (!currentWarehouseId.value) return;
       loading.value = true;
       try {
         const res = await request.get('/ppe/list');
@@ -98,35 +159,39 @@ export default {
         loading.value = false;
       }
     };
-    
+
+    watch(currentWarehouseId, () => {
+      fetchData();
+    });
+
     const getStockType = (row) => {
       if (row.stock === 0) return 'danger';
       if (row.stock < 10) return 'warning';
       return 'success';
     };
-    
+
     const getStatusText = (status) => {
       const map = { normal: '正常', low: '偏低', out: '告急' };
       return map[status] || status;
     };
-    
+
     const handleAdd = () => {
       isEdit.value = false;
-      dialogTitle.value = '新增设备';
+      dialogTitle.value = '新增用品';
       Object.assign(form, { id: null, name: '', type: '', stock: 0 });
       dialogVisible.value = true;
     };
-    
+
     const handleEdit = (row) => {
       isEdit.value = true;
-      dialogTitle.value = '编辑设备';
+      dialogTitle.value = '编辑用品';
       Object.assign(form, row);
       dialogVisible.value = true;
     };
-    
+
     const handleDelete = async (row) => {
       try {
-        await ElMessageBox.confirm('确定删除该设备吗？', '提示', { type: 'warning' });
+        await ElMessageBox.confirm('确定删除该用品吗？', '提示', { type: 'warning' });
         const res = await request.delete(`/ppe/delete/${row.id}`);
         if (res.code === 200) {
           ElMessage.success('删除成功');
@@ -136,7 +201,7 @@ export default {
         console.error('删除失败:', error);
       }
     };
-    
+
     const handleSubmit = async () => {
       try {
         await formRef.value.validate();
@@ -151,25 +216,50 @@ export default {
         console.error('提交失败:', error);
       }
     };
-    
+
+    const handleAddWarehouse = async () => {
+      if (!warehouseForm.code || !warehouseForm.name) {
+        ElMessage.warning('请填写仓库编号和名称');
+        return;
+      }
+      try {
+        const res = await request.post('/ppe/warehouse-add', warehouseForm);
+        if (res.code === 200) {
+          ElMessage.success('仓库添加成功');
+          showAddWarehouse.value = false;
+          Object.assign(warehouseForm, { code: '', name: '', location: '' });
+          fetchWarehouses();
+        }
+      } catch (error) {
+        console.error('添加仓库失败:', error);
+      }
+    };
+
     onMounted(() => {
+      fetchWarehouses();
       fetchData();
     });
-    
+
     return {
       loading,
       tableData,
+      warehouseList,
+      currentWarehouseId,
       dialogVisible,
+      showAddWarehouse,
       dialogTitle,
       formRef,
+      warehouseRef,
       form,
+      warehouseForm,
       rules,
       getStockType,
       getStatusText,
       handleAdd,
       handleEdit,
       handleDelete,
-      handleSubmit
+      handleSubmit,
+      handleAddWarehouse
     };
   }
 };
@@ -185,5 +275,15 @@ export default {
 
 .page-header h3 {
   margin: 0;
+}
+
+.warehouse-selector {
+  display: flex;
+  align-items: center;
+}
+
+.warehouse-selector .label {
+  margin-right: 10px;
+  font-weight: bold;
 }
 </style>
