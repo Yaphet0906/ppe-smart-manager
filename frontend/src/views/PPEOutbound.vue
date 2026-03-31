@@ -29,7 +29,27 @@
         </el-form-item>
         
         <el-form-item label="备注" prop="remark">
-          <el-input v-model="form.remark" type="textarea" rows="3" />
+          <el-input v-model="form.remark" placeholder="请输入备注" />
+        </el-form-item>
+
+        <!-- 智能识别填单 -->
+        <el-divider>智能识别填单</el-divider>
+        
+        <el-form-item label="智能识别">
+          <el-input 
+            v-model="aiNote" 
+            type="textarea" 
+            :rows="3" 
+            placeholder="粘贴语音转文字内容或输入自然语言描述，如：张三 13812345678 领5个安全帽 车间用"
+          />
+          <el-button 
+            type="success" 
+            @click="handleAIRecognize" 
+            :loading="aiLoading"
+            style="margin-top: 10px;"
+          >
+            开始识别
+          </el-button>
         </el-form-item>
         
         <el-form-item>
@@ -56,15 +76,18 @@
 
 <script>
 import { reactive, ref, onMounted } from 'vue';
+import { ElMessage } from 'element-plus';
 import request from '../utils/request';
 
 export default {
   name: 'PPEOutbound',
   setup() {
     const loading = ref(false);
+    const aiLoading = ref(false);
     const ppeList = ref([]);
     const recordList = ref([]);
     const formRef = ref(null);
+    const aiNote = ref('');
     
     const form = reactive({
       ppeId: null,
@@ -91,7 +114,7 @@ export default {
           ppeList.value = res.data;
         }
       } catch (error) {
-        console.error('获取设备列表失败:', error);
+        console.error('获取用品列表失败:', error);
       }
     };
     
@@ -106,6 +129,43 @@ export default {
         console.error('获取出库记录失败:', error);
       } finally {
         loading.value = false;
+      }
+    };
+
+    // AI 智能识别
+    const handleAIRecognize = async () => {
+      if (!aiNote.value || aiNote.value.trim().length === 0) {
+        ElMessage.warning('请输入识别内容');
+        return;
+      }
+
+      aiLoading.value = true;
+      try {
+        const res = await request.post('/ppe/ai-parse-note', { note: aiNote.value });
+        if (res.code === 200) {
+          const data = res.data;
+          
+          // 填充表单
+          if (data.name) form.receiver = data.name;
+          if (data.phone) form.phone = data.phone;
+          if (data.quantity) form.quantity = data.quantity;
+          if (data.purpose) form.remark = data.purpose;
+          
+          // 匹配用品
+          if (data.itemId) {
+            form.ppeId = data.itemId;
+          }
+          
+          ElMessage.success('识别成功，请检查并确认');
+          aiNote.value = '';
+        } else {
+          ElMessage.error(res.msg || '识别失败');
+        }
+      } catch (error) {
+        console.error('AI 识别失败:', error);
+        ElMessage.error('识别失败，请重试');
+      } finally {
+        aiLoading.value = false;
       }
     };
     
@@ -126,6 +186,7 @@ export default {
     
     const handleReset = () => {
       formRef.value.resetFields();
+      aiNote.value = '';
     };
     
     onMounted(() => {
@@ -135,13 +196,16 @@ export default {
     
     return {
       loading,
+      aiLoading,
       ppeList,
       recordList,
       formRef,
       form,
+      aiNote,
       rules,
       handleSubmit,
-      handleReset
+      handleReset,
+      handleAIRecognize
     };
   }
 };

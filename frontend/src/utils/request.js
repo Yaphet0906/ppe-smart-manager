@@ -3,7 +3,7 @@ import { ElMessage } from 'element-plus';
 // 创建axios实例
 const service = axios.create({
   baseURL: process.env.VUE_APP_BASE_API || '/api',
-  timeout: 5000 // 请求超时时间
+  timeout: 20000 // 请求超时时间（AI识别需要较长时间）
 });
 
 // 请求拦截器（添加token）

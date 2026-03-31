@@ -261,4 +261,117 @@ router.post('/warehouse-delete', authMiddleware, async (req, res) => {
   }
 });
 
+// AI 智能识别填单
+router.post('/ai-parse-note', authMiddleware, async (req, res) => {
+  try {
+    const { note } = req.body;
+    if (!note || note.trim().length === 0) {
+      return res.json({ code: 400, msg: '请输入识别内容' });
+    }
+
+    // 获取当前库存物品列表用于匹配
+    const [items] = await pool.query(
+      'SELECT id, name FROM inv_items WHERE tenant_id = ? AND deleted_at IS NULL',
+      [req.companyId]
+    );
+    const itemNames = items.map(i => i.name).join('、');
+
+    // 调用 Kimi API
+    const aiConfig = require('../config/ai');
+    const response = await fetch(aiConfig.MOONSHOT_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${aiConfig.MOONSHOT_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: aiConfig.MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: `你是一个出库单智能识别助手。请从用户的自然语言描述中提取以下信息：
+- 领用人姓名
+- 手机号（11位数字）
+- 物品名称（从以下库存中匹配最接近的：${itemNames}）
+- 数量（数字）
+- 用途/备注
+
+请返回严格的 JSON 格式：
+{
+  "name": "姓名或null",
+  "phone": "手机号或null",
+  "item": "物品名称或null",
+  "quantity": 数字或null,
+  "purpose": "用途或null"
+}
+
+如果某项无法识别，返回 null。
+
+【重要】你必须只返回纯 JSON 对象，格式如下：
+{"name": "姓名或null", "phone": "手机号或null", "item": "物品名称或null", "quantity": 数字或null, "purpose": "用途或null"}
+
+不要返回任何 markdown 代码块标记，不要返回任何解释说明文字，只返回 JSON 字符串本身。`
+          },
+          {
+            role: 'user',
+            content: note
+          }
+        ],
+        temperature: 1
+      })
+    });
+
+    const aiResult = await response.json();
+    
+    if (aiResult.error) {
+      console.error('AI API 错误:', aiResult.error);
+      return res.json({ code: 500, msg: 'AI 识别失败' });
+    }
+
+    // 解析 AI 返回的内容
+    let parsedData;
+    try {
+      const content = aiResult.choices[0].message.content;
+      // 提取 JSON 部分
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsedData = JSON.parse(jsonMatch[0]);
+      } else {
+        parsedData = JSON.parse(content);
+      }
+    } catch (e) {
+      console.error('解析 AI 返回失败:', e);
+      return res.json({ code: 500, msg: '识别结果解析失败' });
+    }
+
+    // 匹配物品ID
+    let matchedItemId = null;
+    if (parsedData.item) {
+      const matchedItem = items.find(i => 
+        i.name.includes(parsedData.item) || 
+        parsedData.item.includes(i.name)
+      );
+      if (matchedItem) {
+        matchedItemId = matchedItem.id;
+      }
+    }
+
+    res.json({
+      code: 200,
+      data: {
+        name: parsedData.name,
+        phone: parsedData.phone,
+        itemId: matchedItemId,
+        itemName: parsedData.item,
+        quantity: parsedData.quantity,
+        purpose: parsedData.purpose
+      }
+    });
+
+  } catch (error) {
+    console.error('AI 识别错误:', error);
+    res.json({ code: 500, msg: '服务器错误' });
+  }
+});
+
 module.exports = router;
