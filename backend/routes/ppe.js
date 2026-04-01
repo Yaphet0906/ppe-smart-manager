@@ -25,7 +25,7 @@ const authMiddleware = async (req, res, next) => {
 router.get('/list', authMiddleware, async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT * FROM inv_items WHERE tenant_id = ? AND deleted_at IS NULL ORDER BY id DESC',
+      'SELECT *, quantity as stock, category as type FROM ppe_items WHERE company_id = ? AND deleted_at IS NULL ORDER BY id DESC',
       [req.companyId]
     );
     res.json({ code: 200, data: rows });
@@ -37,24 +37,39 @@ router.get('/list', authMiddleware, async (req, res) => {
 // 添加用品
 router.post('/add', authMiddleware, async (req, res) => {
   try {
-    const { name, category, specification, unit, quantity, safety_stock } = req.body;
-    const [result] = await pool.query(
-      'INSERT INTO inv_items (tenant_id, name, category_code, specification, unit, quantity, safety_stock) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [req.companyId, name, category, specification, unit || '件', quantity || 0, safety_stock || 10]
-    );
-    res.json({ code: 200, msg: '添加成功', data: { id: result.insertId } });
+    const { name, category, specification, unit, quantity, safety_stock, brand, model } = req.body;
+    // 先尝试带 brand/model 的插入
+    try {
+      const [result] = await pool.query(
+        'INSERT INTO ppe_items (company_id, name, category, specification, unit, quantity, min_stock, brand, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [req.companyId, name, category, specification, unit || '件', quantity || 0, safety_stock || 10, brand, model]
+      );
+      res.json({ code: 200, msg: '添加成功', data: { id: result.insertId } });
+    } catch (err) {
+      // 如果 brand/model 字段不存在，使用不带这些字段的插入
+      if (err.message.includes('brand') || err.message.includes('model')) {
+        const [result] = await pool.query(
+          'INSERT INTO ppe_items (company_id, name, category, specification, unit, quantity, min_stock) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [req.companyId, name, category, specification, unit || '件', quantity || 0, safety_stock || 10]
+        );
+        res.json({ code: 200, msg: '添加成功', data: { id: result.insertId } });
+      } else {
+        throw err;
+      }
+    }
   } catch (error) {
-    res.json({ code: 500, msg: '服务器错误' });
+    console.error('添加用品错误:', error);
+    res.json({ code: 500, msg: '服务器错误: ' + error.message });
   }
 });
 
 // 更新用品
 router.post('/update', authMiddleware, async (req, res) => {
   try {
-    const { id, name, category, specification, unit, quantity, safety_stock } = req.body;
+    const { id, name, category, specification, unit, quantity, safety_stock, brand, model } = req.body;
     await pool.query(
-      'UPDATE inv_items SET name = ?, category_code = ?, specification = ?, unit = ?, quantity = ?, safety_stock = ? WHERE id = ? AND tenant_id = ?',
-      [name, category, specification, unit, quantity, safety_stock, id, req.companyId]
+      'UPDATE ppe_items SET name = ?, category = ?, specification = ?, unit = ?, quantity = ?, min_stock = ?, brand = ?, model = ? WHERE id = ? AND company_id = ?',
+      [name, category, specification, unit, quantity, safety_stock, brand, model, id, req.companyId]
     );
     res.json({ code: 200, msg: '更新成功' });
   } catch (error) {
@@ -66,7 +81,7 @@ router.post('/update', authMiddleware, async (req, res) => {
 router.delete('/delete/:id', authMiddleware, async (req, res) => {
   try {
     await pool.query(
-      'UPDATE inv_items SET deleted_at = NOW() WHERE id = ? AND tenant_id = ?',
+      'UPDATE ppe_items SET deleted_at = NOW() WHERE id = ? AND company_id = ?',
       [req.params.id, req.companyId]
     );
     res.json({ code: 200, msg: '删除成功' });
@@ -78,18 +93,39 @@ router.delete('/delete/:id', authMiddleware, async (req, res) => {
 // 入库
 router.post('/inbound', authMiddleware, async (req, res) => {
   try {
-    const { item_id, quantity, supplier, remarks } = req.body;
+    const { item_id, quantity, supplier, remarks, brand, model } = req.body;
     const connection = await pool.getConnection();
     await connection.beginTransaction();
     try {
-      await connection.query(
-        'INSERT INTO inv_inbound (tenant_id, item_id, quantity, supplier, remarks, operator_id) VALUES (?, ?, ?, ?, ?, ?)',
-        [req.companyId, item_id, quantity, supplier, remarks, req.userId]
+      // 插入入库记录
+      const [result] = await connection.query(
+        'INSERT INTO inbound_records (company_id, inbound_no, inbound_date, supplier, remarks) VALUES (?, ?, CURDATE(), ?, ?)',
+        [req.companyId, 'RK' + Date.now(), supplier, remarks]
       );
+      // 插入入库明细
       await connection.query(
-        'UPDATE inv_items SET quantity = quantity + ? WHERE id = ? AND tenant_id = ?',
+        'INSERT INTO inbound_items (inbound_id, item_id, quantity) VALUES (?, ?, ?)',
+        [result.insertId, item_id, quantity]
+      );
+      // 更新库存
+      await connection.query(
+        'UPDATE ppe_items SET quantity = quantity + ? WHERE id = ? AND company_id = ?',
         [quantity, item_id, req.companyId]
       );
+      // 更新品牌型号（如果字段存在）
+      if (brand || model) {
+        try {
+          await connection.query(
+            'UPDATE ppe_items SET brand = COALESCE(?, brand), model = COALESCE(?, model) WHERE id = ? AND company_id = ?',
+            [brand, model, item_id, req.companyId]
+          );
+        } catch (err) {
+          // 忽略 brand/model 字段不存在的错误
+          if (!err.message.includes('brand') && !err.message.includes('model')) {
+            throw err;
+          }
+        }
+      }
       await connection.commit();
       res.json({ code: 200, msg: '入库成功' });
     } catch (err) {
@@ -99,7 +135,8 @@ router.post('/inbound', authMiddleware, async (req, res) => {
       connection.release();
     }
   } catch (error) {
-    res.json({ code: 500, msg: '入库失败' });
+    console.error('入库错误:', error);
+    res.json({ code: 500, msg: '入库失败: ' + error.message });
   }
 });
 
@@ -111,18 +148,18 @@ router.post('/outbound', authMiddleware, async (req, res) => {
     await connection.beginTransaction();
     try {
       const [items] = await connection.query(
-        'SELECT quantity FROM inv_items WHERE id = ? AND tenant_id = ?',
+        'SELECT quantity FROM ppe_items WHERE id = ? AND company_id = ?',
         [item_id, req.companyId]
       );
       if (items.length === 0 || items[0].quantity < quantity) {
         return res.json({ code: 400, msg: '库存不足' });
       }
       await connection.query(
-        'INSERT INTO inv_outbound (tenant_id, item_id, quantity, employee_name, employee_phone, purpose, operator_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [req.companyId, item_id, quantity, employee_name, employee_phone, purpose, req.userId]
+        'INSERT INTO outbound_records (company_id, outbound_no, outbound_date, employee_name, employee_phone, purpose, remarks) VALUES (?, ?, CURDATE(), ?, ?, ?, ?)',
+        [req.companyId, 'CK' + Date.now(), employee_name, employee_phone, purpose, '']
       );
       await connection.query(
-        'UPDATE inv_items SET quantity = quantity - ? WHERE id = ? AND tenant_id = ?',
+        'UPDATE ppe_items SET quantity = quantity - ? WHERE id = ? AND company_id = ?',
         [quantity, item_id, req.companyId]
       );
       await connection.commit();
@@ -142,11 +179,11 @@ router.post('/outbound', authMiddleware, async (req, res) => {
 router.get('/inbound-records', authMiddleware, async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT i.*, item.name as item_name, u.name as operator_name 
-       FROM inv_inbound i 
-       LEFT JOIN inv_items item ON i.item_id = item.id 
-       LEFT JOIN core_users u ON i.operator_id = u.id 
-       WHERE i.tenant_id = ? ORDER BY i.id DESC`,
+      `SELECT r.*, i.name as item_name 
+       FROM inbound_records r 
+       LEFT JOIN inbound_items ri ON r.id = ri.inbound_id
+       LEFT JOIN ppe_items i ON ri.item_id = i.id 
+       WHERE r.company_id = ? ORDER BY r.id DESC`,
       [req.companyId]
     );
     res.json({ code: 200, data: rows });
@@ -159,11 +196,11 @@ router.get('/inbound-records', authMiddleware, async (req, res) => {
 router.get('/outbound-records', authMiddleware, async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT o.*, item.name as item_name, u.name as operator_name 
-       FROM inv_outbound o 
-       LEFT JOIN inv_items item ON o.item_id = item.id 
-       LEFT JOIN core_users u ON o.operator_id = u.id 
-       WHERE o.tenant_id = ? ORDER BY o.id DESC`,
+      `SELECT o.*, i.name as item_name 
+       FROM outbound_records o 
+       LEFT JOIN outbound_items oi ON o.id = oi.outbound_id
+       LEFT JOIN ppe_items i ON oi.item_id = i.id 
+       WHERE o.company_id = ? ORDER BY o.id DESC`,
       [req.companyId]
     );
     res.json({ code: 200, data: rows });
@@ -176,19 +213,19 @@ router.get('/outbound-records', authMiddleware, async (req, res) => {
 router.get('/stats', authMiddleware, async (req, res) => {
   try {
     const [totalResult] = await pool.query(
-      'SELECT COUNT(*) as count FROM inv_items WHERE tenant_id = ? AND deleted_at IS NULL',
+      'SELECT COUNT(*) as count FROM ppe_items WHERE company_id = ? AND deleted_at IS NULL',
       [req.companyId]
     );
     const [normalResult] = await pool.query(
-      'SELECT COUNT(*) as count FROM inv_items WHERE tenant_id = ? AND quantity > safety_stock AND deleted_at IS NULL',
+      'SELECT COUNT(*) as count FROM ppe_items WHERE company_id = ? AND quantity > min_stock AND deleted_at IS NULL',
       [req.companyId]
     );
     const [lowResult] = await pool.query(
-      'SELECT COUNT(*) as count FROM inv_items WHERE tenant_id = ? AND quantity <= safety_stock AND quantity > 0 AND deleted_at IS NULL',
+      'SELECT COUNT(*) as count FROM ppe_items WHERE company_id = ? AND quantity <= min_stock AND quantity > 0 AND deleted_at IS NULL',
       [req.companyId]
     );
     const [outResult] = await pool.query(
-      'SELECT COUNT(*) as count FROM inv_items WHERE tenant_id = ? AND quantity = 0 AND deleted_at IS NULL',
+      'SELECT COUNT(*) as count FROM ppe_items WHERE company_id = ? AND quantity = 0 AND deleted_at IS NULL',
       [req.companyId]
     );
     res.json({

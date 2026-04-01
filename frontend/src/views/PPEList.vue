@@ -25,6 +25,8 @@
       <el-table :data="tableData" v-loading="loading" border>
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="name" label="用品名称" />
+        <el-table-column prop="brand" label="品牌" width="120" />
+        <el-table-column prop="model" label="型号" width="120" />
         <el-table-column prop="type" label="类型" width="120" />
         <el-table-column prop="stock" label="库存数量" width="100">
           <template #default="{ row }">

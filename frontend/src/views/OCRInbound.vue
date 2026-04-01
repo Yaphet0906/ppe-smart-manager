@@ -23,29 +23,43 @@
         </template>
       </el-upload>
 
-      <div v-if="recognizedItems.length > 0" class="recognized-result">
-        <h4>识别结果</h4>
-        <el-table :data="recognizedItems" border>
-          <el-table-column prop="name" label="物品名称" />
-          <el-table-column prop="quantity" label="数量" width="100" />
-          <el-table-column prop="isNew" label="状态" width="100">
-            <template #default="{ row }">
-              <el-tag :type="row.isNew ? 'success' : 'info'">
-                {{ row.isNew ? '新品' : '已有' }}
-              </el-tag>
-            </template>
-          </el-table-column>
+      <!-- 识别结果汇总 -->
+      <div v-if="recognitionResult.inbound_date" class="inbound-summary">
+        <el-divider>入库信息汇总</el-divider>
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="入库单号">{{ recognitionResult.inbound_no || '系统自动生成' }}</el-descriptions-item>
+          <el-descriptions-item label="入库日期">{{ recognitionResult.inbound_date }}</el-descriptions-item>
+          <el-descriptions-item label="仓库名称">{{ recognitionResult.warehouse_name || '默认仓库' }}</el-descriptions-item>
+          <el-descriptions-item label="识别物品数">{{ recognitionResult.items?.length || 0 }} 件</el-descriptions-item>
+        </el-descriptions>
+      </div>
+
+      <!-- 识别详情表格 -->
+      <div v-if="recognitionResult.items?.length > 0" class="recognized-result">
+        <el-divider>识别详情</el-divider>
+        <el-table :data="recognitionResult.items" border>
+          <el-table-column type="index" label="序号" width="60" />
+          <el-table-column prop="name" label="劳防用品名称" />
+          <el-table-column prop="brand" label="品牌" width="120" />
+          <el-table-column prop="model" label="型号" width="120" />
+          <el-table-column prop="quantity" label="数量" width="80" />
+          <el-table-column prop="unit" label="单位" width="80" />
+          <el-table-column prop="remark" label="备注" />
         </el-table>
-        <el-button type="primary" @click="confirmInbound" style="margin-top: 20px;">
-          确认入库
-        </el-button>
+        
+        <div class="action-buttons">
+          <el-button @click="resetForm">重新识别</el-button>
+          <el-button type="primary" @click="confirmInbound">
+            确认入库
+          </el-button>
+        </div>
       </div>
     </el-card>
   </div>
 </template>
 
 <script>
-import { ref } from 'vue';
+import { ref, reactive } from 'vue';
 import { ElMessage } from 'element-plus';
 import { UploadFilled } from '@element-plus/icons-vue';
 import request from '../utils/request';
@@ -54,7 +68,13 @@ export default {
   name: 'OCRInbound',
   components: { UploadFilled },
   setup() {
-    const recognizedItems = ref([]);
+    const recognitionResult = reactive({
+      inbound_no: '',
+      inbound_date: '',
+      warehouse_name: '',
+      remark: '',
+      items: []
+    });
 
     const handleFileChange = async (file) => {
       try {
@@ -64,8 +84,8 @@ export default {
           const base64 = reader.result.split(',')[1];
           const res = await request.post('/ppe/ocr-recognize', { imageBase64: base64 });
           if (res.code === 200) {
-            recognizedItems.value = res.data.items || [];
-            ElMessage.success('识别成功');
+            Object.assign(recognitionResult, res.data);
+            ElMessage.success('识别成功，请检查并确认');
           }
         };
       } catch (error) {
@@ -75,20 +95,35 @@ export default {
 
     const confirmInbound = async () => {
       try {
-        const res = await request.post('/ppe/ocr-inbound', { items: recognizedItems.value });
+        const res = await request.post('/ppe/ocr-inbound', { 
+          items: recognitionResult.items,
+          inbound_no: recognitionResult.inbound_no,
+          inbound_date: recognitionResult.inbound_date,
+          warehouse_name: recognitionResult.warehouse_name,
+          remark: recognitionResult.remark
+        });
         if (res.code === 200) {
           ElMessage.success('入库成功');
-          recognizedItems.value = [];
+          resetForm();
         }
       } catch (error) {
         ElMessage.error('入库失败');
       }
     };
 
+    const resetForm = () => {
+      recognitionResult.inbound_no = '';
+      recognitionResult.inbound_date = '';
+      recognitionResult.warehouse_name = '';
+      recognitionResult.remark = '';
+      recognitionResult.items = [];
+    };
+
     return {
-      recognizedItems,
+      recognitionResult,
       handleFileChange,
-      confirmInbound
+      confirmInbound,
+      resetForm
     };
   }
 };
@@ -100,7 +135,16 @@ export default {
   margin-bottom: 20px;
 }
 
-.recognized-result {
+.inbound-summary {
   margin-top: 30px;
+}
+
+.recognized-result {
+  margin-top: 20px;
+}
+
+.action-buttons {
+  margin-top: 20px;
+  text-align: center;
 }
 </style>

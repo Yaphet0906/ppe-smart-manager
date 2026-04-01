@@ -21,7 +21,7 @@
     <!-- 手动入库表单 -->
     <el-card class="inbound-form" v-if="showManualForm">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
-        <el-form-item label="选择设备" prop="ppeId">
+        <el-form-item label="选择用品" prop="ppeId">
           <el-select v-model="form.ppeId" placeholder="请选择设备" style="width: 100%">
             <el-option 
               v-for="item in ppeList" 
@@ -51,11 +51,11 @@
     <h3 style="margin-top: 30px;">入库记录</h3>
     <el-card>
       <el-table :data="recordList" v-loading="loading" border>
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="ppeName" label="设备名称" />
-        <el-table-column prop="quantity" label="入库数量" width="100" />
-        <el-table-column prop="remark" label="备注" show-overflow-tooltip />
-        <el-table-column prop="createTime" label="入库时间" width="180" />
+        <el-table-column prop="inbound_no" label="入库单号" width="160" />
+        <el-table-column prop="inbound_date" label="入库日期" width="120" />
+        <el-table-column prop="item_name" label="用品名称" />
+        <el-table-column prop="supplier" label="供应商" width="150" />
+        <el-table-column prop="remarks" label="备注" show-overflow-tooltip />
       </el-table>
     </el-card>
   </div>
