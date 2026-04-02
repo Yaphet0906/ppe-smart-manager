@@ -170,9 +170,12 @@ export default {
       if (!currentWarehouseId.value) return;
       loading.value = true;
       try {
+        const warehouseId = parseInt(currentWarehouseId.value);
+        console.log('正在获取仓库数据:', warehouseId);
         const res = await request.get('/ppe/list', {
-          params: { warehouse_id: currentWarehouseId.value }
+          params: { warehouse_id: warehouseId }
         });
+        console.log('返回数据:', res);
         if (res.code === 200) {
           tableData.value = res.data;
         }
