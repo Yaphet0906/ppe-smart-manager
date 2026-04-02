@@ -55,6 +55,16 @@
         <el-form-item label="用品名称" prop="name">
           <el-input v-model="form.name" />
         </el-form-item>
+        <el-form-item label="所属仓库" prop="warehouse_id">
+          <el-select v-model="form.warehouse_id" style="width: 100%" placeholder="请选择仓库">
+            <el-option
+              v-for="warehouse in warehouseList"
+              :key="warehouse.id"
+              :label="warehouse.name"
+              :value="warehouse.id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="类型" prop="type">
           <el-select v-model="form.type" style="width: 100%">
             <el-option label="口罩" value="口罩" />
@@ -63,6 +73,12 @@
             <el-option label="护目镜" value="护目镜" />
             <el-option label="安全帽" value="安全帽" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="品牌" prop="brand">
+          <el-input v-model="form.brand" placeholder="可选" />
+        </el-form-item>
+        <el-form-item label="型号" prop="model">
+          <el-input v-model="form.model" placeholder="可选" />
         </el-form-item>
         <el-form-item label="库存数量" prop="stock">
           <el-input-number v-model="form.stock" :min="0" style="width: 100%" />
@@ -118,7 +134,10 @@ export default {
       id: null,
       name: '',
       type: '',
-      stock: 0
+      stock: 0,
+      warehouse_id: null,
+      brand: '',
+      model: ''
     });
 
     const warehouseForm = reactive({
@@ -151,7 +170,9 @@ export default {
       if (!currentWarehouseId.value) return;
       loading.value = true;
       try {
-        const res = await request.get('/ppe/list');
+        const res = await request.get('/ppe/list', {
+          params: { warehouse_id: currentWarehouseId.value }
+        });
         if (res.code === 200) {
           tableData.value = res.data;
         }
@@ -180,7 +201,15 @@ export default {
     const handleAdd = () => {
       isEdit.value = false;
       dialogTitle.value = '新增用品';
-      Object.assign(form, { id: null, name: '', type: '', stock: 0 });
+      Object.assign(form, { 
+        id: null, 
+        name: '', 
+        type: '', 
+        stock: 0, 
+        warehouse_id: currentWarehouseId.value,
+        brand: '',
+        model: ''
+      });
       dialogVisible.value = true;
     };
 
