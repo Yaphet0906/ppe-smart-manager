@@ -29,12 +29,14 @@ router.get('/list', authMiddleware, async (req, res) => {
     let params = [req.companyId];
     
     // 如果指定了仓库，按仓库筛选
-    if (warehouse_id && warehouse_id !== 'null' && warehouse_id !== '') {
+    if (warehouse_id && warehouse_id !== 'null' && warehouse_id !== '' && warehouse_id !== 'undefined') {
       query += ' AND warehouse_id = ?';
-      params.push(warehouse_id);
+      params.push(parseInt(warehouse_id));
     }
     
     query += ' ORDER BY id DESC';
+    
+    console.log('查询库存列表:', { warehouse_id, tenant_id: req.companyId, query, params });
     
     const [rows] = await pool.query(query, params);
     
