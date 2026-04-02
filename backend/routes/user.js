@@ -147,7 +147,7 @@ router.post('/quick-outbound', async (req, res) => {
     // 查询物品
     const [items] = await pool.query(
       'SELECT * FROM inv_items WHERE id = ? AND tenant_id = ?',
-      [ppeId, companyId]
+      [ppeId, tenantId]
     );
     if (items.length === 0) {
       return res.json({ code: 400, msg: '物品不存在' });
@@ -167,16 +167,22 @@ router.post('/quick-outbound', async (req, res) => {
     await connection.beginTransaction();
     
     try {
-      // 创建出库记录
+      // 创建出库记录（新表 inv_outbound）
       await connection.query(
-        'INSERT INTO outbound_records (company_id, outbound_no, outbound_date, employee_name, employee_phone, department, purpose) VALUES (?, ?, CURDATE(), ?, ?, ?, ?)',
-        [companyId, outboundNo, employeeName, employeePhone, '待填写', purpose || '日常领用']
+        'INSERT INTO inv_outbound (tenant_id, warehouse_id, item_id, quantity, employee_name, employee_phone, purpose, source_type, outbound_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE())',
+        [tenantId, item.warehouse_id, ppeId, quantity, employeeName, employeePhone, purpose || '扫码领用', 'scan']
       );
       
-      // 扣减库存
+      // 扣减库存（新表 inv_items）
       await connection.query(
-        'UPDATE ppe_items SET quantity = quantity - ? WHERE id = ? AND company_id = ?',
-        [quantity, ppeId, companyId]
+        'UPDATE inv_items SET quantity = quantity - ? WHERE id = ? AND tenant_id = ?',
+        [quantity, ppeId, tenantId]
+      );
+      
+      // 插入库存流水
+      await connection.query(
+        'INSERT INTO inv_transactions (tenant_id, warehouse_id, item_id, type, quantity, before_qty, after_qty, source_no, operator_name, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [tenantId, item.warehouse_id, ppeId, 'outbound', quantity, item.quantity, item.quantity - quantity, outboundNo, employeeName, purpose || '扫码领用']
       );
       
       await connection.commit();
@@ -213,9 +219,9 @@ router.get('/public-ppe-list', async (req, res) => {
       return res.json({ code: 400, msg: '公司代码无效' });
     }
     
-    // 获取物品列表（只返回有库存的）
+    // 获取物品列表（只返回有库存的）- 使用新表 inv_items
     const [items] = await pool.query(
-      'SELECT id, name, category, specification, unit, quantity, min_stock FROM ppe_items WHERE company_id = ? AND deleted_at IS NULL ORDER BY name',
+      'SELECT id, name, category_code as category, specification, unit, quantity, safety_stock as min_stock FROM inv_items WHERE tenant_id = ? AND deleted_at IS NULL ORDER BY name',
       [companies[0].id]
     );
     

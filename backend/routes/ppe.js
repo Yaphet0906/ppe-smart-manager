@@ -100,42 +100,51 @@ router.delete('/delete/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// 入库
+// 入库（使用新表 inv_inbound 和 inv_items）
 router.post('/inbound', authMiddleware, async (req, res) => {
   try {
-    const { item_id, quantity, supplier, remarks, brand, model } = req.body;
+    const { item_id, quantity, supplier, remarks, brand, model, warehouse_id } = req.body;
     const connection = await pool.getConnection();
     await connection.beginTransaction();
     try {
-      // 插入入库记录
+      // 获取物品当前库存
+      const [items] = await connection.query(
+        'SELECT quantity, warehouse_id FROM inv_items WHERE id = ? AND tenant_id = ?',
+        [item_id, req.companyId]
+      );
+      if (items.length === 0) {
+        return res.json({ code: 400, msg: '物品不存在' });
+      }
+      const beforeQty = items[0].quantity;
+      const afterQty = beforeQty + parseInt(quantity);
+      const itemWarehouseId = warehouse_id || items[0].warehouse_id;
+
+      // 插入入库记录（新表 inv_inbound）
       const [result] = await connection.query(
-        'INSERT INTO inbound_records (company_id, inbound_no, inbound_date, supplier, remarks) VALUES (?, ?, CURDATE(), ?, ?)',
-        [req.companyId, 'RK' + Date.now(), supplier, remarks]
+        'INSERT INTO inv_inbound (tenant_id, warehouse_id, item_id, quantity, source_type, remark, operator_id, operator_name, inbound_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE())',
+        [req.companyId, itemWarehouseId, item_id, quantity, 'manual', remarks || supplier, req.userId, req.userName || 'admin']
       );
-      // 插入入库明细
+
+      // 插入库存流水
       await connection.query(
-        'INSERT INTO inbound_items (inbound_id, item_id, quantity) VALUES (?, ?, ?)',
-        [result.insertId, item_id, quantity]
+        'INSERT INTO inv_transactions (tenant_id, warehouse_id, item_id, type, quantity, before_qty, after_qty, source_id, source_no, operator_id, operator_name, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [req.companyId, itemWarehouseId, item_id, 'inbound', quantity, beforeQty, afterQty, result.insertId, 'RK' + Date.now(), req.userId, req.userName || 'admin', remarks || supplier]
       );
+
       // 更新库存
       await connection.query(
-        'UPDATE ppe_items SET quantity = quantity + ? WHERE id = ? AND company_id = ?',
+        'UPDATE inv_items SET quantity = quantity + ? WHERE id = ? AND tenant_id = ?',
         [quantity, item_id, req.companyId]
       );
-      // 更新品牌型号（如果字段存在）
+
+      // 更新品牌型号（如果提供了）
       if (brand || model) {
-        try {
-          await connection.query(
-            'UPDATE ppe_items SET brand = COALESCE(?, brand), model = COALESCE(?, model) WHERE id = ? AND company_id = ?',
-            [brand, model, item_id, req.companyId]
-          );
-        } catch (err) {
-          // 忽略 brand/model 字段不存在的错误
-          if (!err.message.includes('brand') && !err.message.includes('model')) {
-            throw err;
-          }
-        }
+        await connection.query(
+          'UPDATE inv_items SET brand = COALESCE(?, brand), model = COALESCE(?, model) WHERE id = ? AND tenant_id = ?',
+          [brand, model, item_id, req.companyId]
+        );
       }
+
       await connection.commit();
       res.json({ code: 200, msg: '入库成功' });
     } catch (err) {
@@ -150,28 +159,42 @@ router.post('/inbound', authMiddleware, async (req, res) => {
   }
 });
 
-// 出库
+// 出库（使用新表 inv_outbound 和 inv_items）
 router.post('/outbound', authMiddleware, async (req, res) => {
   try {
-    const { item_id, quantity, employee_name, employee_phone, purpose } = req.body;
+    const { item_id, quantity, employee_name, employee_phone, purpose, warehouse_id } = req.body;
     const connection = await pool.getConnection();
     await connection.beginTransaction();
     try {
       const [items] = await connection.query(
-        'SELECT quantity FROM ppe_items WHERE id = ? AND company_id = ?',
+        'SELECT quantity, warehouse_id FROM inv_items WHERE id = ? AND tenant_id = ?',
         [item_id, req.companyId]
       );
       if (items.length === 0 || items[0].quantity < quantity) {
         return res.json({ code: 400, msg: '库存不足' });
       }
-      await connection.query(
-        'INSERT INTO outbound_records (company_id, outbound_no, outbound_date, employee_name, employee_phone, purpose, remarks) VALUES (?, ?, CURDATE(), ?, ?, ?, ?)',
-        [req.companyId, 'CK' + Date.now(), employee_name, employee_phone, purpose, '']
+      const beforeQty = items[0].quantity;
+      const afterQty = beforeQty - parseInt(quantity);
+      const itemWarehouseId = warehouse_id || items[0].warehouse_id;
+
+      // 插入出库记录（新表 inv_outbound）
+      const [result] = await connection.query(
+        'INSERT INTO inv_outbound (tenant_id, warehouse_id, item_id, quantity, employee_name, employee_phone, purpose, source_type, operator_id, operator_name, outbound_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE())',
+        [req.companyId, itemWarehouseId, item_id, quantity, employee_name, employee_phone, purpose, 'web', req.userId, req.userName || 'admin']
       );
+
+      // 插入库存流水
       await connection.query(
-        'UPDATE ppe_items SET quantity = quantity - ? WHERE id = ? AND company_id = ?',
+        'INSERT INTO inv_transactions (tenant_id, warehouse_id, item_id, type, quantity, before_qty, after_qty, source_id, source_no, operator_id, operator_name, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [req.companyId, itemWarehouseId, item_id, 'outbound', quantity, beforeQty, afterQty, result.insertId, 'CK' + Date.now(), req.userId, req.userName || 'admin', purpose]
+      );
+
+      // 更新库存
+      await connection.query(
+        'UPDATE inv_items SET quantity = quantity - ? WHERE id = ? AND tenant_id = ?',
         [quantity, item_id, req.companyId]
       );
+
       await connection.commit();
       res.json({ code: 200, msg: '出库成功' });
     } catch (err) {
@@ -181,62 +204,92 @@ router.post('/outbound', authMiddleware, async (req, res) => {
       connection.release();
     }
   } catch (error) {
-    res.json({ code: 500, msg: '出库失败' });
+    console.error('出库错误:', error);
+    res.json({ code: 500, msg: '出库失败: ' + error.message });
   }
 });
 
-// 获取入库记录
+// 获取入库记录（使用新表 inv_inbound）
 router.get('/inbound-records', authMiddleware, async (req, res) => {
   try {
-    const [rows] = await pool.query(
-      `SELECT r.*, i.name as item_name 
-       FROM inbound_records r 
-       LEFT JOIN inbound_items ri ON r.id = ri.inbound_id
-       LEFT JOIN ppe_items i ON ri.item_id = i.id 
-       WHERE r.company_id = ? ORDER BY r.id DESC`,
-      [req.companyId]
-    );
+    const { warehouse_id } = req.query;
+    let query = `
+      SELECT i.*, it.name as item_name, w.name as warehouse_name 
+      FROM inv_inbound i 
+      LEFT JOIN inv_items it ON i.item_id = it.id 
+      LEFT JOIN inv_warehouses w ON i.warehouse_id = w.id 
+      WHERE i.tenant_id = ?`;
+    let params = [req.companyId];
+    
+    if (warehouse_id && warehouse_id !== 'null' && warehouse_id !== '') {
+      query += ' AND i.warehouse_id = ?';
+      params.push(warehouse_id);
+    }
+    
+    query += ' ORDER BY i.id DESC';
+    
+    const [rows] = await pool.query(query, params);
     res.json({ code: 200, data: rows });
   } catch (error) {
+    console.error('获取入库记录错误:', error);
     res.json({ code: 500, msg: '服务器错误' });
   }
 });
 
-// 获取出库记录
+// 获取出库记录（使用新表 inv_outbound）
 router.get('/outbound-records', authMiddleware, async (req, res) => {
   try {
-    const [rows] = await pool.query(
-      `SELECT o.*, i.name as item_name 
-       FROM outbound_records o 
-       LEFT JOIN outbound_items oi ON o.id = oi.outbound_id
-       LEFT JOIN ppe_items i ON oi.item_id = i.id 
-       WHERE o.company_id = ? ORDER BY o.id DESC`,
-      [req.companyId]
-    );
+    const { warehouse_id } = req.query;
+    let query = `
+      SELECT o.*, it.name as item_name, w.name as warehouse_name 
+      FROM inv_outbound o 
+      LEFT JOIN inv_items it ON o.item_id = it.id 
+      LEFT JOIN inv_warehouses w ON o.warehouse_id = w.id 
+      WHERE o.tenant_id = ?`;
+    let params = [req.companyId];
+    
+    if (warehouse_id && warehouse_id !== 'null' && warehouse_id !== '') {
+      query += ' AND o.warehouse_id = ?';
+      params.push(warehouse_id);
+    }
+    
+    query += ' ORDER BY o.id DESC';
+    
+    const [rows] = await pool.query(query, params);
     res.json({ code: 200, data: rows });
   } catch (error) {
+    console.error('获取出库记录错误:', error);
     res.json({ code: 500, msg: '服务器错误' });
   }
 });
 
-// 获取统计数据
+// 获取统计数据（使用新表 inv_items）
 router.get('/stats', authMiddleware, async (req, res) => {
   try {
+    const { warehouse_id } = req.query;
+    let whereClause = 'WHERE tenant_id = ? AND deleted_at IS NULL';
+    let params = [req.companyId];
+    
+    if (warehouse_id && warehouse_id !== 'null' && warehouse_id !== '') {
+      whereClause += ' AND warehouse_id = ?';
+      params.push(warehouse_id);
+    }
+    
     const [totalResult] = await pool.query(
-      'SELECT COUNT(*) as count FROM ppe_items WHERE company_id = ? AND deleted_at IS NULL',
-      [req.companyId]
+      `SELECT COUNT(*) as count FROM inv_items ${whereClause}`,
+      [...params]
     );
     const [normalResult] = await pool.query(
-      'SELECT COUNT(*) as count FROM ppe_items WHERE company_id = ? AND quantity > min_stock AND deleted_at IS NULL',
-      [req.companyId]
+      `SELECT COUNT(*) as count FROM inv_items ${whereClause} AND quantity > safety_stock`,
+      [...params]
     );
     const [lowResult] = await pool.query(
-      'SELECT COUNT(*) as count FROM ppe_items WHERE company_id = ? AND quantity <= min_stock AND quantity > 0 AND deleted_at IS NULL',
-      [req.companyId]
+      `SELECT COUNT(*) as count FROM inv_items ${whereClause} AND quantity <= safety_stock AND quantity > 0`,
+      [...params]
     );
     const [outResult] = await pool.query(
-      'SELECT COUNT(*) as count FROM ppe_items WHERE company_id = ? AND quantity = 0 AND deleted_at IS NULL',
-      [req.companyId]
+      `SELECT COUNT(*) as count FROM inv_items ${whereClause} AND quantity = 0`,
+      [...params]
     );
     res.json({
       code: 200,
@@ -248,6 +301,7 @@ router.get('/stats', authMiddleware, async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('获取统计数据错误:', error);
     res.json({ code: 500, msg: '服务器错误' });
   }
 });

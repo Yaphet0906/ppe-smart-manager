@@ -1,102 +1,110 @@
 /**
  * 出库记录模型
- * 处理出库记录和出库明细的数据库操作
+ * 处理出库记录的数据库操作 - 使用新表 inv_outbound
  */
 
 const { query, transaction } = require('../config/database');
 
 class OutboundRecord {
   /**
-   * 创建出库记录（包含明细）
+   * 创建出库记录
    * @param {Object} record - 出库记录信息
-   * @param {string} record.outbound_no - 出库单号
-   * @param {string} record.outbound_date - 出库日期
-   * @param {number} record.employee_id - 领用员工ID
-   * @param {string} record.employee_name - 领用人姓名（用于非系统用户）
-   * @param {string} record.department - 部门
+   * @param {number} record.tenant_id - 租户ID
+   * @param {number} record.warehouse_id - 仓库ID
+   * @param {number} record.item_id - 物品ID
+   * @param {number} record.quantity - 出库数量
+   * @param {string} record.employee_name - 领用人姓名
+   * @param {string} record.employee_phone - 领用人手机号
    * @param {string} record.purpose - 用途
-   * @param {string} record.remarks - 备注
+   * @param {string} record.source_type - 来源类型 (scan/web/manual)
    * @param {number} record.operator_id - 操作人ID
-   * @param {Array} items - 出库明细数组
-   * @param {number} items[].item_id - 物品ID
-   * @param {number} items[].quantity - 出库数量
-   * @param {string} items[].remarks - 明细备注
+   * @param {string} record.operator_name - 操作人姓名
    * @returns {Promise<Object>} 创建的出库记录
    */
-  static async create(record, items) {
+  static async create(record) {
     return await transaction(async (connection) => {
       // 1. 检查库存是否充足
-      for (const item of items) {
-        const checkSql = `
-          SELECT quantity, name FROM ppe_items WHERE id = ? AND deleted_at IS NULL
-        `;
-        const [checkRows] = await connection.execute(checkSql, [item.item_id]);
-        
-        if (checkRows.length === 0) {
-          throw new Error(`物品ID ${item.item_id} 不存在`);
-        }
-        
-        if (checkRows[0].quantity < item.quantity) {
-          throw new Error(`物品 "${checkRows[0].name}" 库存不足，当前库存: ${checkRows[0].quantity}`);
-        }
+      const checkSql = `
+        SELECT quantity, name, warehouse_id FROM inv_items WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+      `;
+      const [checkRows] = await connection.execute(checkSql, [record.item_id, record.tenant_id]);
+      
+      if (checkRows.length === 0) {
+        throw new Error(`物品不存在`);
       }
       
-      // 2. 创建出库记录主表
+      const item = checkRows[0];
+      if (item.quantity < record.quantity) {
+        throw new Error(`物品 "${item.name}" 库存不足，当前库存: ${item.quantity}`);
+      }
+      
+      const beforeQty = item.quantity;
+      const afterQty = beforeQty - parseInt(record.quantity);
+      const warehouseId = record.warehouse_id || item.warehouse_id;
+      
+      // 2. 创建出库记录（新表 inv_outbound）
       const recordSql = `
-        INSERT INTO outbound_records 
-        (outbound_no, outbound_date, employee_id, employee_name, department, purpose, remarks, operator_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        INSERT INTO inv_outbound 
+        (tenant_id, warehouse_id, item_id, quantity, employee_name, employee_phone, purpose, source_type, operator_id, operator_name, outbound_date, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), NOW())
       `;
       
       const recordParams = [
-        record.outbound_no,
-        record.outbound_date,
-        record.employee_id || null,
+        record.tenant_id,
+        warehouseId,
+        record.item_id,
+        record.quantity,
         record.employee_name || null,
-        record.department || null,
+        record.employee_phone || null,
         record.purpose || null,
-        record.remarks || null,
-        record.operator_id
+        record.source_type || 'manual',
+        record.operator_id || null,
+        record.operator_name || 'admin'
       ];
       
       const [recordResult] = await connection.execute(recordSql, recordParams);
       const outboundId = recordResult.insertId;
       
-      // 3. 创建出库明细并更新库存
-      const detailSql = `
-        INSERT INTO outbound_items (outbound_id, item_id, quantity, remarks, created_at)
-        VALUES (?, ?, ?, ?, NOW())
+      // 3. 插入库存流水
+      const transSql = `
+        INSERT INTO inv_transactions (tenant_id, warehouse_id, item_id, type, quantity, before_qty, after_qty, source_id, source_no, operator_id, operator_name, remark, created_at)
+        VALUES (?, ?, ?, 'outbound', ?, ?, ?, ?, ?, ?, ?, ?, NOW())
       `;
+      await connection.execute(transSql, [
+        record.tenant_id,
+        warehouseId,
+        record.item_id,
+        record.quantity,
+        beforeQty,
+        afterQty,
+        outboundId,
+        'CK' + Date.now(),
+        record.operator_id,
+        record.operator_name || 'admin',
+        record.purpose || '出库'
+      ]);
       
-      for (const item of items) {
-        // 插入明细
-        await connection.execute(detailSql, [
-          outboundId,
-          item.item_id,
-          item.quantity,
-          item.remarks || null
-        ]);
-        
-        // 更新库存（减少）
-        const updateSql = `
-          UPDATE ppe_items
-          SET quantity = quantity - ?, updated_at = NOW()
-          WHERE id = ? AND deleted_at IS NULL
-        `;
-        await connection.execute(updateSql, [item.quantity, item.item_id]);
-      }
+      // 4. 更新库存（减少）
+      const updateSql = `
+        UPDATE inv_items
+        SET quantity = quantity - ?, updated_at = NOW()
+        WHERE id = ? AND tenant_id = ?
+      `;
+      await connection.execute(updateSql, [record.quantity, record.item_id, record.tenant_id]);
       
       return {
         id: outboundId,
-        outbound_no: record.outbound_no,
-        outbound_date: record.outbound_date,
-        employee_id: record.employee_id,
+        tenant_id: record.tenant_id,
+        warehouse_id: warehouseId,
+        item_id: record.item_id,
+        quantity: record.quantity,
         employee_name: record.employee_name,
-        department: record.department,
+        employee_phone: record.employee_phone,
         purpose: record.purpose,
-        remarks: record.remarks,
+        source_type: record.source_type || 'manual',
         operator_id: record.operator_id,
-        items: items
+        operator_name: record.operator_name,
+        outbound_date: new Date().toISOString().slice(0, 10)
       };
     });
   }
@@ -104,137 +112,94 @@ class OutboundRecord {
   /**
    * 查询所有出库记录
    * @param {Object} options - 查询选项
+   * @param {number} options.tenant_id - 租户ID
+   * @param {number} options.warehouse_id - 仓库ID（可选）
    * @param {string} options.startDate - 开始日期
    * @param {string} options.endDate - 结束日期
-   * @param {number} options.employeeId - 员工ID
-   * @param {string} options.department - 部门
+   * @param {string} options.employeeName - 领用人姓名
    * @returns {Promise<Array>} 出库记录列表
    */
   static async findAll(options = {}) {
     let sql = `
       SELECT 
-        ors.id, ors.outbound_no, ors.outbound_date, 
-        ors.employee_id, u.name as employee_name, ors.employee_name as custom_employee_name,
-        ors.department, ors.purpose, ors.remarks,
-        ors.operator_id, op.name as operator_name, ors.created_at
-      FROM outbound_records ors
-      LEFT JOIN users u ON ors.employee_id = u.id
-      LEFT JOIN users op ON ors.operator_id = op.id
-      WHERE 1=1
+        o.id, o.outbound_no, o.outbound_date, 
+        o.employee_name, o.employee_phone, o.purpose,
+        o.quantity, o.source_type,
+        o.operator_id, o.operator_name, o.created_at,
+        it.name as item_name, it.specification, it.unit,
+        w.name as warehouse_name
+      FROM inv_outbound o
+      LEFT JOIN inv_items it ON o.item_id = it.id
+      LEFT JOIN inv_warehouses w ON o.warehouse_id = w.id
+      WHERE o.tenant_id = ?
     `;
     
-    const params = [];
+    const params = [options.tenant_id];
+    
+    if (options.warehouse_id) {
+      sql += ' AND o.warehouse_id = ?';
+      params.push(options.warehouse_id);
+    }
     
     if (options.startDate) {
-      sql += ' AND ors.outbound_date >= ?';
+      sql += ' AND o.outbound_date >= ?';
       params.push(options.startDate);
     }
     
     if (options.endDate) {
-      sql += ' AND ors.outbound_date <= ?';
+      sql += ' AND o.outbound_date <= ?';
       params.push(options.endDate);
     }
     
-    if (options.employeeId) {
-      sql += ' AND ors.employee_id = ?';
-      params.push(options.employeeId);
+    if (options.employeeName) {
+      sql += ' AND o.employee_name LIKE ?';
+      params.push(`%${options.employeeName}%`);
     }
     
-    if (options.department) {
-      sql += ' AND ors.department = ?';
-      params.push(options.department);
-    }
-    
-    sql += ' ORDER BY ors.outbound_date DESC, ors.created_at DESC';
+    sql += ' ORDER BY o.outbound_date DESC, o.id DESC';
     
     return await query(sql, params);
   }
 
   /**
-   * 根据ID查询出库记录（包含明细）
+   * 根据ID查询出库记录
    * @param {number} id - 出库记录ID
+   * @param {number} tenant_id - 租户ID
    * @returns {Promise<Object|null>} 出库记录详情
    */
-  static async findById(id) {
-    // 查询主记录
-    const recordSql = `
+  static async findById(id, tenant_id) {
+    const sql = `
       SELECT 
-        ors.id, ors.outbound_no, ors.outbound_date, 
-        ors.employee_id, u.name as employee_name, ors.employee_name as custom_employee_name,
-        ors.department, ors.purpose, ors.remarks,
-        ors.operator_id, op.name as operator_name, ors.created_at
-      FROM outbound_records ors
-      LEFT JOIN users u ON ors.employee_id = u.id
-      LEFT JOIN users op ON ors.operator_id = op.id
-      WHERE ors.id = ?
+        o.*,
+        it.name as item_name, it.specification, it.unit, it.category_code,
+        w.name as warehouse_name
+      FROM inv_outbound o
+      LEFT JOIN inv_items it ON o.item_id = it.id
+      LEFT JOIN inv_warehouses w ON o.warehouse_id = w.id
+      WHERE o.id = ? AND o.tenant_id = ?
     `;
     
-    const recordRows = await query(recordSql, [id]);
-    
-    if (recordRows.length === 0) {
-      return null;
-    }
-    
-    const record = recordRows[0];
-    
-    // 查询明细
-    const itemsSql = `
-      SELECT oi.id, oi.item_id, pi.name as item_name, pi.specification, pi.unit,
-             oi.quantity, oi.remarks
-      FROM outbound_items oi
-      JOIN ppe_items pi ON oi.item_id = pi.id
-      WHERE oi.outbound_id = ?
-    `;
-    
-    record.items = await query(itemsSql, [id]);
-    
-    return record;
+    const rows = await query(sql, [id, tenant_id]);
+    return rows.length > 0 ? rows[0] : null;
   }
 
   /**
    * 按员工查询出库记录
-   * @param {number} employeeId - 员工ID
+   * @param {string} employeeName - 员工姓名
+   * @param {number} tenant_id - 租户ID
    * @param {Object} options - 查询选项
    * @returns {Promise<Array>} 出库记录列表
    */
-  static async findByEmployee(employeeId, options = {}) {
-    const queryOptions = { ...options, employeeId };
+  static async findByEmployee(employeeName, tenant_id, options = {}) {
+    const queryOptions = { ...options, tenant_id, employeeName };
     return await this.findAll(queryOptions);
-  }
-
-  /**
-   * 生成出库单号
-   * 格式: OUT + 年月日 + 4位序号
-   * @returns {Promise<string>} 出库单号
-   */
-  static async generateOutboundNo() {
-    const today = new Date();
-    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-    const prefix = `OUT${dateStr}`;
-    
-    const sql = `
-      SELECT outbound_no 
-      FROM outbound_records 
-      WHERE outbound_no LIKE ?
-      ORDER BY outbound_no DESC
-      LIMIT 1
-    `;
-    
-    const rows = await query(sql, [`${prefix}%`]);
-    
-    let seq = 1;
-    if (rows.length > 0) {
-      const lastNo = rows[0].outbound_no;
-      const lastSeq = parseInt(lastNo.slice(-4));
-      seq = lastSeq + 1;
-    }
-    
-    return `${prefix}${seq.toString().padStart(4, '0')}`;
   }
 
   /**
    * 获取出库统计信息
    * @param {Object} options - 查询选项
+   * @param {number} options.tenant_id - 租户ID
+   * @param {number} options.warehouse_id - 仓库ID（可选）
    * @param {string} options.startDate - 开始日期
    * @param {string} options.endDate - 结束日期
    * @returns {Promise<Object>} 统计信息
@@ -243,22 +208,27 @@ class OutboundRecord {
     let sql = `
       SELECT 
         COUNT(*) as total_records,
-        SUM(oi.quantity) as total_quantity,
-        COUNT(DISTINCT ors.employee_id) as employee_count
-      FROM outbound_records ors
-      JOIN outbound_items oi ON ors.id = oi.outbound_id
-      WHERE 1=1
+        SUM(quantity) as total_quantity,
+        COUNT(DISTINCT employee_name) as employee_count,
+        COUNT(DISTINCT item_id) as item_count
+      FROM inv_outbound
+      WHERE tenant_id = ?
     `;
     
-    const params = [];
+    const params = [options.tenant_id];
+    
+    if (options.warehouse_id) {
+      sql += ' AND warehouse_id = ?';
+      params.push(options.warehouse_id);
+    }
     
     if (options.startDate) {
-      sql += ' AND ors.outbound_date >= ?';
+      sql += ' AND outbound_date >= ?';
       params.push(options.startDate);
     }
     
     if (options.endDate) {
-      sql += ' AND ors.outbound_date <= ?';
+      sql += ' AND outbound_date <= ?';
       params.push(options.endDate);
     }
     
@@ -269,6 +239,7 @@ class OutboundRecord {
   /**
    * 获取出库物品统计（按物品分类）
    * @param {Object} options - 查询选项
+   * @param {number} options.tenant_id - 租户ID
    * @param {string} options.startDate - 开始日期
    * @param {string} options.endDate - 结束日期
    * @returns {Promise<Array>} 统计列表
@@ -276,32 +247,31 @@ class OutboundRecord {
   static async getItemStatistics(options = {}) {
     let sql = `
       SELECT 
-        pi.id,
-        pi.name,
-        pi.category,
-        pi.specification,
-        pi.unit,
-        SUM(oi.quantity) as total_quantity,
-        COUNT(DISTINCT ors.id) as outbound_count
-      FROM outbound_items oi
-      JOIN ppe_items pi ON oi.item_id = pi.id
-      JOIN outbound_records ors ON oi.outbound_id = ors.id
-      WHERE 1=1
+        it.id,
+        it.name,
+        it.category_code,
+        it.specification,
+        it.unit,
+        SUM(o.quantity) as total_quantity,
+        COUNT(DISTINCT o.id) as outbound_count
+      FROM inv_outbound o
+      JOIN inv_items it ON o.item_id = it.id
+      WHERE o.tenant_id = ?
     `;
     
-    const params = [];
+    const params = [options.tenant_id];
     
     if (options.startDate) {
-      sql += ' AND ors.outbound_date >= ?';
+      sql += ' AND o.outbound_date >= ?';
       params.push(options.startDate);
     }
     
     if (options.endDate) {
-      sql += ' AND ors.outbound_date <= ?';
+      sql += ' AND o.outbound_date <= ?';
       params.push(options.endDate);
     }
     
-    sql += ' GROUP BY pi.id, pi.name, pi.category, pi.specification, pi.unit';
+    sql += ' GROUP BY it.id, it.name, it.category_code, it.specification, it.unit';
     sql += ' ORDER BY total_quantity DESC';
     
     return await query(sql, params);
@@ -310,6 +280,7 @@ class OutboundRecord {
   /**
    * 获取员工领用统计
    * @param {Object} options - 查询选项
+   * @param {number} options.tenant_id - 租户ID
    * @param {string} options.startDate - 开始日期
    * @param {string} options.endDate - 结束日期
    * @returns {Promise<Array>} 员工领用统计列表
@@ -317,30 +288,28 @@ class OutboundRecord {
   static async getEmployeeStatistics(options = {}) {
     let sql = `
       SELECT 
-        COALESCE(u.id, 0) as employee_id,
-        COALESCE(u.name, ors.employee_name, '未知') as employee_name,
-        ors.department,
-        COUNT(DISTINCT ors.id) as outbound_count,
-        SUM(oi.quantity) as total_quantity
-      FROM outbound_records ors
-      JOIN outbound_items oi ON ors.id = oi.outbound_id
-      LEFT JOIN users u ON ors.employee_id = u.id
-      WHERE 1=1
+        COALESCE(employee_name, '未知') as employee_name,
+        employee_phone,
+        purpose,
+        COUNT(*) as outbound_count,
+        SUM(quantity) as total_quantity
+      FROM inv_outbound
+      WHERE tenant_id = ?
     `;
     
-    const params = [];
+    const params = [options.tenant_id];
     
     if (options.startDate) {
-      sql += ' AND ors.outbound_date >= ?';
+      sql += ' AND outbound_date >= ?';
       params.push(options.startDate);
     }
     
     if (options.endDate) {
-      sql += ' AND ors.outbound_date <= ?';
+      sql += ' AND outbound_date <= ?';
       params.push(options.endDate);
     }
     
-    sql += ' GROUP BY COALESCE(u.id, 0), COALESCE(u.name, ors.employee_name), ors.department';
+    sql += ' GROUP BY employee_name, employee_phone, purpose';
     sql += ' ORDER BY total_quantity DESC';
     
     return await query(sql, params);
