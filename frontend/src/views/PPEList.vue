@@ -93,11 +93,11 @@
     <!-- 添加仓库对话框 -->
     <el-dialog v-model="showAddWarehouse" title="添加仓库" width="400px">
       <el-form :model="warehouseForm" ref="warehouseRef" label-width="80px">
-        <el-form-item label="仓库编号" prop="code" required>
-          <el-input v-model="warehouseForm.code" placeholder="如：A01" />
-        </el-form-item>
         <el-form-item label="仓库名称" prop="name" required>
-          <el-input v-model="warehouseForm.name" placeholder="如：主仓库" />
+          <el-input v-model="warehouseForm.name" placeholder="如：欧易的儿子的仓库3" />
+        </el-form-item>
+        <el-form-item label="仓库编号" prop="code">
+          <el-input v-model="warehouseForm.code" placeholder="留空自动生成（如：WH003）" />
         </el-form-item>
         <el-form-item label="位置" prop="location">
           <el-input v-model="warehouseForm.location" placeholder="如：一楼东侧" />
@@ -252,8 +252,8 @@ export default {
     };
 
     const handleAddWarehouse = async () => {
-      if (!warehouseForm.code || !warehouseForm.name) {
-        ElMessage.warning('请填写仓库编号和名称');
+      if (!warehouseForm.name) {
+        ElMessage.warning('请填写仓库名称');
         return;
       }
       try {

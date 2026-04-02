@@ -329,17 +329,39 @@ router.get('/warehouse-list', authMiddleware, async (req, res) => {
   }
 });
 
-// 添加仓库
+// 添加仓库（支持自动生成 code）
 router.post('/warehouse-add', authMiddleware, async (req, res) => {
   try {
-    const { code, name, location, manager_name, manager_phone, status } = req.body;
+    let { code, name, location, manager_name, manager_phone, status } = req.body;
+    
+    // 如果没有提供 code，自动生成
+    if (!code || code.trim() === '') {
+      // 查询当前租户下最大的 WH 编号
+      const [rows] = await pool.query(
+        "SELECT code FROM inv_warehouses WHERE tenant_id = ? AND code LIKE 'WH%' ORDER BY code DESC LIMIT 1",
+        [req.companyId]
+      );
+      
+      let nextNumber = 1;
+      if (rows.length > 0) {
+        // 提取数字部分，如 WH001 -> 1
+        const match = rows[0].code.match(/WH(\d+)/);
+        if (match) {
+          nextNumber = parseInt(match[1]) + 1;
+        }
+      }
+      // 生成新 code，如 WH003
+      code = 'WH' + nextNumber.toString().padStart(3, '0');
+    }
+    
     const [result] = await pool.query(
       'INSERT INTO inv_warehouses (tenant_id, code, name, location, manager_name, manager_phone, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [req.companyId, code, name, location, manager_name, manager_phone, status || 1]
     );
-    res.json({ code: 200, msg: '添加成功', data: { id: result.insertId } });
+    res.json({ code: 200, msg: '添加成功', data: { id: result.insertId, code } });
   } catch (error) {
-    res.json({ code: 500, msg: '服务器错误' });
+    console.error('添加仓库错误:', error);
+    res.json({ code: 500, msg: '服务器错误: ' + error.message });
   }
 });
 
