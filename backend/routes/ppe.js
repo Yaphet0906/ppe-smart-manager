@@ -25,20 +25,27 @@ const authMiddleware = async (req, res, next) => {
 router.get('/list', authMiddleware, async (req, res) => {
   try {
     const { warehouse_id } = req.query;
+    console.log('【调试】原始 warehouse_id:', warehouse_id, '类型:', typeof warehouse_id);
+    
     let query = 'SELECT id, name, brand, model, category_code as category, specification, unit, quantity as stock, quantity as quantity, safety_stock as min_stock, status FROM inv_items WHERE tenant_id = ? AND deleted_at IS NULL';
     let params = [req.companyId];
     
     // 如果指定了仓库，按仓库筛选
     if (warehouse_id && warehouse_id !== 'null' && warehouse_id !== '' && warehouse_id !== 'undefined') {
+      const warehouseIdInt = parseInt(warehouse_id);
+      console.log('【调试】转换后的 warehouse_id:', warehouseIdInt);
       query += ' AND warehouse_id = ?';
-      params.push(parseInt(warehouse_id));
+      params.push(warehouseIdInt);
     }
     
     query += ' ORDER BY id DESC';
     
-    console.log('查询库存列表:', { warehouse_id, tenant_id: req.companyId, query, params });
+    console.log('【调试】最终 SQL:', query);
+    console.log('【调试】参数:', params);
     
     const [rows] = await pool.query(query, params);
+    console.log('【调试】查询结果条数:', rows.length);
+    console.log('【调试】查询结果:', rows);
     
     // 转换数据格式，适配前端
     const formattedRows = rows.map(row => ({
