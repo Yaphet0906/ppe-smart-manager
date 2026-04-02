@@ -45,13 +45,13 @@
         </el-form-item>
         
         <div class="login-options">
-          <el-link type="primary" @click="showRegister = true">注册新公司</el-link>
+          <el-link type="primary" @click="showRegister = true">新公司注册</el-link>
         </div>
       </el-form>
     </el-card>
     
     <!-- 注册公司弹窗 -->
-    <el-dialog v-model="showRegister" title="注册新公司" width="90%" :width="isMobile ? '90%' : '500px'">
+    <el-dialog v-model="showRegister" title="新公司注册" width="90%" :width="isMobile ? '90%' : '500px'">
       <el-form :model="registerForm" :rules="registerRules" ref="registerFormRef" label-position="top">
         <el-form-item label="公司名称" prop="companyName">
           <el-input v-model="registerForm.companyName" placeholder="请输入公司名称" />
@@ -190,7 +190,7 @@ export default {
             router.push('/change-password');
           } else {
             ElMessage.success('登录成功');
-            router.push('/dashboard');
+            router.push('/home');
           }
         } else {
           ElMessage.error(res.msg || '登录失败');

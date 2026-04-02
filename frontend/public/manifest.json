@@ -1,0 +1,19 @@
+{
+  "name": "PPE Smart Manager - 劳保用品管理",
+  "short_name": "PPE管理",
+  "description": "专为工厂HSE设计的劳保用品管理系统，支持扫码领用、截图入库",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#409EFF",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "zh-CN"
+}
