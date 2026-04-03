@@ -6,21 +6,29 @@ const jwt = require('jsonwebtoken');
 
 const SECRET_KEY = process.env.SECRET_KEY || 'default-secret-key';
 
-// 用户登录（支持多租户）
+// 生成随机公司代码（仅用于数据库内部，不对用户显示）
+const generateCompanyCode = () => {
+  return 'C' + Date.now().toString(36).toUpperCase();
+};
+
+// 用户登录（使用公司名称+手机号+密码）
 router.post('/login', async (req, res) => {
   try {
-    const { companyCode, phone, password } = req.body;
+    const { companyName, phone, password } = req.body;
     
-    // 先查询租户
-    const [tenants] = await pool.query('SELECT * FROM core_tenants WHERE code = ? AND status = 1', [companyCode]);
+    // 先查询租户（使用公司名称）
+    const [tenants] = await pool.query(
+      'SELECT * FROM core_tenants WHERE name = ? AND status = 1', 
+      [companyName]
+    );
     if (tenants.length === 0) {
-      return res.json({ code: 401, msg: '公司代码不存在' });
+      return res.json({ code: 401, msg: '公司名称不存在' });
     }
     const tenant = tenants[0];
     
     // 查询用户（带租户隔离）
     const [users] = await pool.query(
-      'SELECT u.*, t.name as company_name, t.code as company_code FROM core_users u JOIN core_tenants t ON u.tenant_id = t.id WHERE u.phone = ? AND u.tenant_id = ? AND u.deleted_at IS NULL',
+      'SELECT u.*, t.name as company_name FROM core_users u JOIN core_tenants t ON u.tenant_id = t.id WHERE u.phone = ? AND u.tenant_id = ? AND u.deleted_at IS NULL',
       [phone, tenant.id]
     );
     
@@ -36,7 +44,7 @@ router.post('/login', async (req, res) => {
       return res.json({ code: 401, msg: '手机号或密码错误' });
     }
     
-    // 生成JWT（包含 company_id）
+    // 生成JWT（不包含公司代码）
     const token = jwt.sign(
       { 
         id: user.id, 
@@ -44,7 +52,6 @@ router.post('/login', async (req, res) => {
         name: user.name,
         role: user.role,
         companyId: user.tenant_id,
-        companyCode: user.company_code,
         companyName: user.company_name
       },
       SECRET_KEY,
@@ -63,7 +70,6 @@ router.post('/login', async (req, res) => {
           phone: user.phone,
           role: user.role,
           companyId: user.tenant_id,
-          companyCode: user.company_code,
           companyName: user.company_name
         }
       }
@@ -92,21 +98,24 @@ router.get('/info', async (req, res) => {
   }
 });
 
-// 注册新公司（SaaS 注册入口）
+// 注册新公司（只需要公司名称，自动生成内部code）
 router.post('/register-company', async (req, res) => {
   try {
-    const { companyName, companyCode, contactName, contactPhone, adminPassword } = req.body;
+    const { companyName, contactName, contactPhone, adminPassword } = req.body;
     
-    // 检查公司代码是否已存在
-    const [existing] = await pool.query('SELECT id FROM core_tenants WHERE code = ?', [companyCode]);
+    // 检查公司名称是否已存在
+    const [existing] = await pool.query('SELECT id FROM core_tenants WHERE name = ?', [companyName]);
     if (existing.length > 0) {
-      return res.json({ code: 400, msg: '公司代码已存在' });
+      return res.json({ code: 400, msg: '公司名称已存在' });
     }
+    
+    // 自动生成内部code（仅用于数据库，不对用户显示）
+    const internalCode = generateCompanyCode();
     
     // 创建租户
     const [tenantResult] = await pool.query(
       'INSERT INTO core_tenants (name, code, contact_name, contact_phone, status) VALUES (?, ?, ?, ?, 1)',
-      [companyName, companyCode, contactName, contactPhone]
+      [companyName, internalCode, contactName, contactPhone]
     );
     const tenantId = tenantResult.insertId;
     
@@ -121,9 +130,8 @@ router.post('/register-company', async (req, res) => {
       code: 200,
       msg: '注册成功',
       data: {
-        companyId,
-        companyCode,
-        companyName
+        companyId: tenantId,
+        companyName: companyName
       }
     });
   } catch (error) {
@@ -132,15 +140,18 @@ router.post('/register-company', async (req, res) => {
   }
 });
 
-// 扫码领用 - 免登录登记（简化版）
+// 扫码领用 - 免登录登记（使用公司名称）
 router.post('/quick-outbound', async (req, res) => {
   try {
-    const { companyCode, employeeName, employeePhone, ppeId, quantity, purpose } = req.body;
+    const { companyName, employeeName, employeePhone, ppeId, quantity, purpose } = req.body;
     
-    // 查询租户
-    const [tenants] = await pool.query('SELECT id FROM core_tenants WHERE code = ? AND status = 1', [companyCode]);
+    // 查询租户（使用公司名称）
+    const [tenants] = await pool.query(
+      'SELECT id FROM core_tenants WHERE name = ? AND status = 1', 
+      [companyName]
+    );
     if (tenants.length === 0) {
-      return res.json({ code: 400, msg: '公司代码无效' });
+      return res.json({ code: 400, msg: '公司名称无效' });
     }
     const tenantId = tenants[0].id;
     
@@ -167,13 +178,13 @@ router.post('/quick-outbound', async (req, res) => {
     await connection.beginTransaction();
     
     try {
-      // 创建出库记录（新表 inv_outbound）
+      // 创建出库记录
       await connection.query(
         'INSERT INTO inv_outbound (tenant_id, warehouse_id, item_id, quantity, employee_name, employee_phone, purpose, source_type, outbound_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE())',
         [tenantId, item.warehouse_id, ppeId, quantity, employeeName, employeePhone, purpose || '扫码领用', 'scan']
       );
       
-      // 扣减库存（新表 inv_items）
+      // 扣减库存
       await connection.query(
         'UPDATE inv_items SET quantity = quantity - ? WHERE id = ? AND tenant_id = ?',
         [quantity, ppeId, tenantId]
@@ -211,15 +222,18 @@ router.post('/quick-outbound', async (req, res) => {
 // 公开接口：获取公司物品列表（无需登录，用于扫码领用页面）
 router.get('/public-ppe-list', async (req, res) => {
   try {
-    const { companyCode } = req.query;
+    const { companyName } = req.query;
     
-    // 查询公司
-    const [companies] = await pool.query('SELECT id FROM companies WHERE code = ? AND status = "active"', [companyCode]);
+    // 查询公司（使用公司名称）
+    const [companies] = await pool.query(
+      'SELECT id FROM core_tenants WHERE name = ? AND status = 1', 
+      [companyName]
+    );
     if (companies.length === 0) {
-      return res.json({ code: 400, msg: '公司代码无效' });
+      return res.json({ code: 400, msg: '公司名称无效' });
     }
     
-    // 获取物品列表（只返回有库存的）- 使用新表 inv_items
+    // 获取物品列表
     const [items] = await pool.query(
       'SELECT id, name, category_code as category, specification, unit, quantity, safety_stock as min_stock FROM inv_items WHERE tenant_id = ? AND deleted_at IS NULL ORDER BY name',
       [companies[0].id]
@@ -281,7 +295,7 @@ router.post('/change-password', async (req, res) => {
   }
 });
 
-// 获取当前登录用户信息（任务1：管理员信息展示）
+// 获取当前登录用户信息
 router.get('/profile', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
@@ -293,7 +307,7 @@ router.get('/profile', async (req, res) => {
     
     const [users] = await pool.query(
       `SELECT u.id, u.name, u.phone, u.email, u.role, 
-              t.id as company_id, t.name as company_name, t.code as company_code
+              t.id as company_id, t.name as company_name
        FROM core_users u
        LEFT JOIN core_tenants t ON u.tenant_id = t.id
        WHERE u.id = ?`,

@@ -7,10 +7,10 @@
       </template>
       
       <el-form :model="form" :rules="rules" ref="loginForm" label-position="top">
-        <el-form-item label="公司代码" prop="companyCode">
+        <el-form-item label="公司名称" prop="companyName">
           <el-input 
-            v-model="form.companyCode" 
-            placeholder="请输入公司代码（如：DEMO001）"
+            v-model="form.companyName" 
+            placeholder="请输入公司名称"
             prefix-icon="OfficeBuilding"
           />
         </el-form-item>
@@ -55,10 +55,6 @@
       <el-form :model="registerForm" :rules="registerRules" ref="registerFormRef" label-position="top">
         <el-form-item label="公司名称" prop="companyName">
           <el-input v-model="registerForm.companyName" placeholder="请输入公司名称" />
-        </el-form-item>
-        
-        <el-form-item label="公司代码" prop="companyCode">
-          <el-input v-model="registerForm.companyCode" placeholder="请输入公司代码（英文+数字，如：ABC001）" />
         </el-form-item>
         
         <el-form-item label="联系人姓名" prop="contactName">
@@ -124,20 +120,19 @@ export default {
     });
     
     const form = reactive({
-      companyCode: '',
+      companyName: '',
       phone: '',
       password: ''
     });
     
     const rules = {
-      companyCode: [{ required: true, message: '请输入公司代码', trigger: 'blur' }],
+      companyName: [{ required: true, message: '请输入公司名称', trigger: 'blur' }],
       phone: [{ required: true, message: '请输入手机号', trigger: 'blur' }],
       password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
     };
     
     const registerForm = reactive({
       companyName: '',
-      companyCode: '',
       contactName: '',
       contactPhone: '',
       adminPassword: '',
@@ -154,10 +149,6 @@ export default {
     
     const registerRules = {
       companyName: [{ required: true, message: '请输入公司名称', trigger: 'blur' }],
-      companyCode: [
-        { required: true, message: '请输入公司代码', trigger: 'blur' },
-        { pattern: /^[a-zA-Z0-9]+$/, message: '公司代码只能包含英文和数字', trigger: 'blur' }
-      ],
       contactName: [{ required: true, message: '请输入联系人姓名', trigger: 'blur' }],
       contactPhone: [
         { required: true, message: '请输入联系人手机号', trigger: 'blur' },
@@ -210,17 +201,16 @@ export default {
         
         const res = await request.post('/user/register-company', {
           companyName: registerForm.companyName,
-          companyCode: registerForm.companyCode,
           contactName: registerForm.contactName,
           contactPhone: registerForm.contactPhone,
           adminPassword: registerForm.adminPassword
         });
         
         if (res.code === 200) {
-          ElMessage.success('注册成功，请使用公司代码和手机号登录');
+          ElMessage.success('注册成功，请使用公司名称和手机号登录');
           showRegister.value = false;
           // 自动填充登录表单
-          form.companyCode = registerForm.companyCode;
+          form.companyName = registerForm.companyName;
           form.phone = registerForm.contactPhone;
         } else {
           ElMessage.error(res.msg || '注册失败');
@@ -255,55 +245,32 @@ export default {
 .login-container {
   min-height: 100vh;
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 20px;
 }
 
 .login-card {
-  width: 400px;
-  max-width: 100%;
+  width: 100%;
+  max-width: 400px;
 }
 
 .login-title {
   text-align: center;
   margin: 0;
-  color: #333;
-  font-size: 20px;
+  color: #303133;
 }
 
 .login-subtitle {
   text-align: center;
-  margin: 5px 0 0;
-  color: #666;
+  color: #909399;
   font-size: 14px;
+  margin: 10px 0 0;
 }
 
 .login-options {
-  display: flex;
-  justify-content: center;
-  margin-top: 15px;
-}
-
-/* 手机端适配 */
-@media (max-width: 768px) {
-  .login-container {
-    padding: 10px;
-    align-items: flex-start;
-    padding-top: 50px;
-  }
-  
-  .login-card {
-    width: 100%;
-  }
-  
-  .login-title {
-    font-size: 18px;
-  }
-  
-  .login-subtitle {
-    font-size: 12px;
-  }
+  text-align: center;
+  margin-top: 20px;
 }
 </style>

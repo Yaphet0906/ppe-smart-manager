@@ -12,7 +12,6 @@ export const useUserStore = defineStore('user', {
     isLoggedIn: (state) => !!state.token,
     username: (state) => state.userInfo.name || '',
     companyId: (state) => state.userInfo.companyId || '',
-    companyCode: (state) => state.userInfo.companyCode || '',
     companyName: (state) => state.userInfo.companyName || ''
   },
   

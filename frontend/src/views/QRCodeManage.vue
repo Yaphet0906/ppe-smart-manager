@@ -66,9 +66,9 @@ export default {
       const warehouse = warehouseList.value.find(w => w.id === form.warehouseId);
       if (!warehouse) return;
 
-      const companyCode = userStore.userInfo?.companyCode || 'DEMO';
+      const companyName = userStore.userInfo?.companyName || 'DEMO';
       const baseUrl = window.location.origin;
-      const url = `${baseUrl}/#/quick-outbound?code=${companyCode}&warehouse=${warehouse.id}`;
+      const url = `${baseUrl}/#/quick-outbound?company=${encodeURIComponent(companyName)}&warehouse=${warehouse.id}`;
 
       qrList.value.push({
         warehouseName: warehouse.name,

@@ -11,10 +11,10 @@
         label-position="top"
         class="mobile-form"
       >
-        <el-form-item label="公司代码" prop="companyCode">
+        <el-form-item label="公司名称" prop="companyName">
           <el-input 
-            v-model="form.companyCode" 
-            placeholder="请输入公司代码"
+            v-model="form.companyName" 
+            placeholder="请输入公司名称"
             size="large"
             clearable
           />
@@ -106,7 +106,7 @@ export default {
     const formRef = ref(null);
 
     const form = reactive({
-      companyCode: route.query.code || '',
+      companyName: route.query.company || '',
       employeeName: '',
       employeePhone: '',
       itemId: null,
@@ -114,7 +114,7 @@ export default {
     });
 
     const rules = {
-      companyCode: [{ required: true, message: '请输入公司代码', trigger: 'blur' }],
+      companyName: [{ required: true, message: '请输入公司名称', trigger: 'blur' }],
       employeeName: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
       employeePhone: [
         { required: true, message: '请输入手机号', trigger: 'blur' },
@@ -125,9 +125,9 @@ export default {
     };
 
     const fetchItems = async () => {
-      if (!form.companyCode) return;
+      if (!form.companyName) return;
       try {
-        const res = await request.post('/ppe/public-list', { companyCode: form.companyCode });
+        const res = await request.get('/ppe/public-list', { params: { companyName: form.companyName } });
         if (res.code === 200) {
           itemList.value = res.data;
         }

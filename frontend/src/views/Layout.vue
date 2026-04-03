@@ -72,7 +72,6 @@
         <el-descriptions-item label="用户名">{{ userProfile.name }}</el-descriptions-item>
         <el-descriptions-item label="角色">{{ userProfile.role === 'admin' ? '管理员' : '操作员' }}</el-descriptions-item>
         <el-descriptions-item label="所属公司">{{ userProfile.company_name }}</el-descriptions-item>
-        <el-descriptions-item label="公司代码">{{ userProfile.company_code }}</el-descriptions-item>
         <el-descriptions-item label="手机号">{{ userProfile.phone || '-' }}</el-descriptions-item>
         <el-descriptions-item label="邮箱">{{ userProfile.email || '-' }}</el-descriptions-item>
       </el-descriptions>
