@@ -136,14 +136,51 @@ router.post('/update', authMiddleware, async (req, res) => {
 });
 
 // 删除用品（使用新表 inv_items）
+// 删除用品（软删除）
 router.delete('/delete/:id', authMiddleware, async (req, res) => {
+  const connection = await pool.getConnection();
+  await connection.beginTransaction();
+  
   try {
-    await pool.query(
-      'UPDATE inv_items SET deleted_at = NOW() WHERE id = ? AND tenant_id = ?',
-      [req.params.id, req.companyId]
+    const { reason } = req.body;
+    const itemId = req.params.id;
+    const tenantId = req.companyId;
+    const deletedBy = req.userId;
+    
+    // 1. 获取被删除物品的完整信息（用于记录）
+    const [items] = await connection.query(
+      'SELECT * FROM inv_items WHERE id = ? AND tenant_id = ?',
+      [itemId, tenantId]
     );
+    
+    if (items.length === 0) {
+      await connection.rollback();
+      connection.release();
+      return res.json({ code: 404, msg: '用品不存在' });
+    }
+    
+    const itemData = items[0];
+    
+    // 2. 执行软删除
+    await connection.query(
+      'UPDATE inv_items SET deleted_at = NOW(), deleted_by = ? WHERE id = ? AND tenant_id = ?',
+      [deletedBy, itemId, tenantId]
+    );
+    
+    // 3. 记录删除日志
+    await connection.query(
+      `INSERT INTO delete_logs (table_name, record_id, record_data, deleted_by, deleted_at, delete_reason, tenant_id) 
+       VALUES (?, ?, ?, ?, NOW(), ?, ?)`,
+      ['inv_items', itemId, JSON.stringify(itemData), deletedBy, reason || '未填写原因', tenantId]
+    );
+    
+    await connection.commit();
+    connection.release();
+    
     res.json({ code: 200, msg: '删除成功' });
   } catch (error) {
+    await connection.rollback();
+    connection.release();
     console.error('删除用品错误:', error);
     res.json({ code: 500, msg: '服务器错误: ' + error.message });
   }

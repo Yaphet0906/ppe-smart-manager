@@ -2,65 +2,15 @@
   <div class="ppe-inbound">
     <h3>入库管理</h3>
     
-    <!-- 入库方式选择 -->
-    <el-card class="inbound-method">
-      <div class="method-title">选择入库方式：</div>
-      <div class="method-buttons">
-        <el-button 
-          :type="currentMethod === 'manual' ? 'primary' : 'default'" 
-          size="large" 
-          @click="switchMethod('manual')"
-        >
-          <el-icon><Edit /></el-icon>
-          手动入库
-        </el-button>
-        <el-button 
-          :type="currentMethod === 'ocr' ? 'success' : 'default'" 
-          size="large" 
-          @click="switchMethod('ocr')"
-        >
-          <el-icon><Camera /></el-icon>
-          截图入库
-        </el-button>
+    <!-- 模块一：截图入库 -->
+    <el-card class="inbound-section">
+      <div class="section-title">
+        <el-icon><Camera /></el-icon>
+        <span>截图入库</span>
+        <el-tag type="success" size="small" class="section-tag">推荐</el-tag>
       </div>
-      <p class="method-tip">
-        {{ currentMethod === 'manual' 
-          ? '💡 手动选择用品并输入数量进行入库' 
-          : '💡 推荐：拍照或上传采购订单截图，AI自动识别物品信息' }}
-      </p>
-    </el-card>
-    
-    <!-- 手动入库表单 -->
-    <el-card class="inbound-form" v-if="currentMethod === 'manual'">
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
-        <el-form-item label="选择用品" prop="ppeId">
-          <el-select v-model="form.ppeId" placeholder="请选择设备" style="width: 100%">
-            <el-option 
-              v-for="item in ppeList" 
-              :key="item.id" 
-              :label="item.name" 
-              :value="item.id" 
-            />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="入库数量" prop="quantity">
-          <el-input-number v-model="form.quantity" :min="1" style="width: 100%" />
-        </el-form-item>
-        
-        <el-form-item label="备注" prop="remark">
-          <el-input v-model="form.remark" type="textarea" rows="3" />
-        </el-form-item>
-        
-        <el-form-item>
-          <el-button type="primary" @click="handleSubmit">确认入库</el-button>
-          <el-button @click="handleReset">重置</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <!-- 截图入库表单 -->
-    <el-card class="inbound-form" v-if="currentMethod === 'ocr'">
+      <p class="section-desc">拍照或上传采购订单截图，AI自动识别物品信息</p>
+      
       <!-- 移动端拍照/选择 -->
       <div class="mobile-upload">
         <input
@@ -115,7 +65,7 @@
 
       <!-- 识别结果汇总 -->
       <div v-if="recognitionResult.inbound_date" class="inbound-summary">
-        <el-divider>入库信息汇总</el-divider>
+        <el-divider>识别结果</el-divider>
         <el-descriptions :column="2" border>
           <el-descriptions-item label="入库单号">{{ recognitionResult.inbound_no || '系统自动生成' }}</el-descriptions-item>
           <el-descriptions-item label="入库日期">{{ recognitionResult.inbound_date }}</el-descriptions-item>
@@ -145,14 +95,94 @@
         </div>
       </div>
     </el-card>
+
+    <!-- 模块二：手动入库 -->
+    <el-card class="inbound-section">
+      <div class="section-title">
+        <el-icon><Edit /></el-icon>
+        <span>手动入库</span>
+      </div>
+      <p class="section-desc">手动录入入库信息，支持选择已有用品或新增用品</p>
+      
+      <!-- 手动入库表单 -->
+      <el-form :model="manualForm" :rules="manualRules" ref="manualFormRef" label-width="100px" class="inbound-form">
+        <el-form-item label="用品名称" prop="name">
+          <el-input v-model="manualForm.name" placeholder="如：安全鞋、工作服" />
+        </el-form-item>
+        
+        <el-form-item label="所属仓库" prop="warehouse_id">
+          <el-select v-model="manualForm.warehouse_id" style="width: 100%" placeholder="请选择仓库">
+            <el-option
+              v-for="warehouse in warehouseList"
+              :key="warehouse.id"
+              :label="warehouse.name"
+              :value="parseInt(warehouse.id)"
+            />
+          </el-select>
+        </el-form-item>
+        
+        <el-form-item label="类别" prop="category">
+          <el-select v-model="manualForm.category" style="width: 100%" @change="handleCategoryChange" placeholder="请选择类别">
+            <el-option label="安全鞋" value="safety_shoes" />
+            <el-option label="工作服" value="work_clothes" />
+            <el-option label="手套" value="gloves" />
+            <el-option label="安全帽" value="helmet" />
+            <el-option label="口罩" value="mask" />
+          </el-select>
+        </el-form-item>
+        
+        <!-- 尺码选择 - 根据类别动态显示 -->
+        <el-form-item label="尺码" prop="size" v-if="sizeOptions.length > 0">
+          <el-select v-model="manualForm.size" style="width: 100%" placeholder="请选择尺码">
+            <el-option
+              v-for="size in sizeOptions"
+              :key="size"
+              :label="size"
+              :value="size"
+            />
+          </el-select>
+        </el-form-item>
+        
+        <el-form-item label="品牌" prop="brand">
+          <el-input v-model="manualForm.brand" placeholder="可选" />
+        </el-form-item>
+        
+        <el-form-item label="型号" prop="model">
+          <el-input v-model="manualForm.model" placeholder="可选" />
+        </el-form-item>
+        
+        <el-form-item label="入库数量" prop="quantity">
+          <el-input-number v-model="manualForm.quantity" :min="1" style="width: 100%" />
+        </el-form-item>
+        
+        <el-form-item label="备注" prop="remark">
+          <el-input v-model="manualForm.remark" type="textarea" rows="2" placeholder="可选" />
+        </el-form-item>
+        
+        <el-form-item>
+          <el-button type="primary" @click="handleManualSubmit">确认入库</el-button>
+          <el-button @click="handleManualReset">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
     
-    <h3 style="margin-top: 30px;">入库记录</h3>
-    <el-card>
+    <!-- 模块三：入库记录 -->
+    <el-card class="inbound-section">
+      <div class="section-title">
+        <el-icon><List /></el-icon>
+        <span>入库记录</span>
+      </div>
+      
       <el-table :data="recordList" v-loading="loading" border>
         <el-table-column prop="inbound_no" label="入库单号" width="160" />
-        <el-table-column prop="inbound_date" label="入库日期" width="120" />
+        <el-table-column label="入库日期" width="120">
+          <template #default="{ row }">
+            {{ formatDate(row.inbound_date) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="item_name" label="用品名称" />
-        <el-table-column prop="supplier" label="供应商" width="150" />
+        <el-table-column prop="quantity" label="入库数量" width="100" />
+        <el-table-column prop="operator_name" label="操作人" width="120" />
         <el-table-column prop="remarks" label="备注" show-overflow-tooltip />
       </el-table>
     </el-card>
@@ -160,14 +190,14 @@
 </template>
 
 <script>
-import { reactive, ref, onMounted, watch } from 'vue';
+import { reactive, ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import request from '../utils/request';
-import { Edit, Camera, Picture, UploadFilled } from '@element-plus/icons-vue';
+import { Edit, Camera, Picture, UploadFilled, List } from '@element-plus/icons-vue';
 
 export default {
   components: {
-    Edit, Camera, Picture, UploadFilled
+    Edit, Camera, Picture, UploadFilled, List
   },
   name: 'PPEInbound',
   setup() {
@@ -175,20 +205,50 @@ export default {
     const router = useRouter();
     const loading = ref(false);
     const ppeList = ref([]);
+    const warehouseList = ref([]);
     const recordList = ref([]);
-    const formRef = ref(null);
-    const currentMethod = ref('manual'); // 'manual' 或 'ocr'
+    const existingFormRef = ref(null);
+    const newFormRef = ref(null);
     
     // 手动入库表单
-    const form = reactive({
-      ppeId: null,
+    const manualFormRef = ref(null);
+    const manualForm = reactive({
+      name: '',
+      warehouse_id: null,
+      category: '',
+      size: '',
+      brand: '',
+      model: '',
       quantity: 1,
       remark: ''
     });
     
-    const rules = {
-      ppeId: [{ required: true, message: '请选择设备', trigger: 'change' }],
+    const manualRules = {
+      name: [{ required: true, message: '请输入用品名称', trigger: 'blur' }],
+      category: [{ required: true, message: '请选择类别', trigger: 'change' }],
+      warehouse_id: [{ required: true, message: '请选择仓库', trigger: 'change' }],
       quantity: [{ required: true, message: '请输入入库数量', trigger: 'blur' }]
+    };
+    
+    // 尺码选项
+    const sizeOptions = ref([]);
+    
+    // 类别改变时获取尺码选项
+    const handleCategoryChange = async (category) => {
+      manualForm.size = '';
+      sizeOptions.value = [];
+      if (!category) return;
+      
+      try {
+        const res = await request.get('/ppe/size-options', {
+          params: { category }
+        });
+        if (res.code === 200) {
+          sizeOptions.value = res.data;
+        }
+      } catch (error) {
+        console.error('获取尺码选项失败:', error);
+      }
     };
 
     // OCR 相关
@@ -201,9 +261,7 @@ export default {
       items: []
     });
 
-    const switchMethod = (method) => {
-      currentMethod.value = method;
-    };
+
 
     // 图片压缩函数
     const compressImage = (file, maxWidth = 1280, maxHeight = 1280, quality = 0.8) => {
@@ -300,6 +358,7 @@ export default {
           ElMessage.success('入库成功');
           resetOcrForm();
           fetchRecords();
+          fetchPPEList();
           // 如果是从库存页面跳转来的，返回库存页面
           if (route.query.from === 'stock') {
             setTimeout(() => {
@@ -327,10 +386,25 @@ export default {
           ppeList.value = res.data;
         }
       } catch (error) {
-        console.error('获取设备列表失败:', error);
+        console.error('获取用品列表失败:', error);
       }
     };
     
+    const fetchWarehouses = async () => {
+      try {
+        const res = await request.get('/ppe/warehouse-list');
+        if (res.code === 200) {
+          warehouseList.value = res.data;
+          if (res.data.length > 0 && !manualForm.warehouse_id) {
+            manualForm.warehouse_id = res.data[0].id;
+          }
+        }
+      } catch (error) {
+        console.error('获取仓库列表失败:', error);
+      }
+    };
+    
+
     const fetchRecords = async () => {
       loading.value = true;
       try {
@@ -345,15 +419,25 @@ export default {
       }
     };
     
-    const handleSubmit = async () => {
+    // 手动入库提交
+    const handleManualSubmit = async () => {
       try {
-        await formRef.value.validate();
-        const res = await request.post('/ppe/inbound', form);
+        await manualFormRef.value.validate();
+        const res = await request.post('/ppe/add', {
+          name: manualForm.name,
+          warehouse_id: manualForm.warehouse_id,
+          category: manualForm.category,
+          size: manualForm.size,
+          brand: manualForm.brand,
+          model: manualForm.model,
+          quantity: manualForm.quantity,
+          remark: manualForm.remark
+        });
         if (res.code === 200) {
-          ElMessage.success('入库成功');
-          handleReset();
+          ElMessage.success('新增用品入库成功');
+          handleManualReset();
           fetchRecords();
-          // 如果是从库存页面跳转来的，返回库存页面
+          fetchPPEList();
           if (route.query.from === 'stock') {
             setTimeout(() => {
               router.push('/ppe-list');
@@ -365,40 +449,43 @@ export default {
       }
     };
     
-    const handleReset = () => {
-      formRef.value.resetFields();
+    const handleManualReset = () => {
+      manualFormRef.value.resetFields();
+      sizeOptions.value = [];
+    };
+    
+    // 格式化日期
+    const formatDate = (dateStr) => {
+      if (!dateStr) return '-';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).replace(/\//g, '-');
     };
     
     onMounted(() => {
       fetchPPEList();
+      fetchWarehouses();
       fetchRecords();
-      
-      // 检查是否是从库存页面跳转来的
-      if (route.query.from === 'stock' && route.query.action === 'add') {
-        currentMethod.value = 'manual';
-      }
-    });
-    
-    // 监听路由参数变化
-    watch(() => route.query, (newQuery) => {
-      if (newQuery.from === 'stock' && newQuery.action === 'add') {
-        currentMethod.value = 'manual';
-      }
     });
     
     return {
       loading,
       ppeList,
+      warehouseList,
       recordList,
-      formRef,
-      currentMethod,
-      form,
-      rules,
+      manualFormRef,
+      manualForm,
+      manualRules,
+      sizeOptions,
       fileInput,
       recognitionResult,
-      switchMethod,
-      handleSubmit,
-      handleReset,
+      formatDate,
+      handleCategoryChange,
+      handleManualSubmit,
+      handleManualReset,
       triggerCamera,
       triggerGallery,
       handleFileSelect,
@@ -411,47 +498,50 @@ export default {
 </script>
 
 <style scoped>
-.inbound-method {
+.ppe-inbound {
+  padding-bottom: 20px;
+}
+
+/* 模块样式 */
+.inbound-section {
   margin-bottom: 20px;
 }
 
-.method-title {
-  font-weight: bold;
-  margin-bottom: 15px;
-  font-size: 16px;
-}
-
-.method-buttons {
+.section-title {
   display: flex;
-  gap: 20px;
-  margin-bottom: 15px;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #303133;
+  margin-bottom: 8px;
 }
 
-.method-buttons .el-button {
-  flex: 1;
-  height: 60px;
-  font-size: 16px;
-}
-
-.method-buttons .el-icon {
+.section-title .el-icon {
   font-size: 20px;
-  margin-right: 8px;
 }
 
-.method-tip {
-  color: #666;
+.section-tag {
+  margin-left: 8px;
+}
+
+.section-desc {
+  color: #909399;
   font-size: 14px;
-  margin: 0;
+  margin-bottom: 20px;
+  margin-top: 0;
 }
 
+
+
+/* 表单样式 */
 .inbound-form {
-  max-width: 800px;
-  margin-bottom: 20px;
+  max-width: 600px;
 }
 
 /* OCR 相关样式 */
 .mobile-upload {
-  padding: 24px 16px;
+  padding: 16px;
   text-align: center;
 }
 
@@ -527,17 +617,13 @@ export default {
     width: auto;
     min-width: 160px;
   }
-}
-
-/* 手机端适配 */
-@media (max-width: 768px) {
-  .method-buttons {
-    flex-direction: column;
-    gap: 10px;
+  
+  .section-title {
+    font-size: 20px;
   }
   
-  .method-buttons .el-button {
-    width: 100%;
+  .inbound-form {
+    margin: 0 auto;
   }
 }
 </style>

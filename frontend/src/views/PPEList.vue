@@ -2,7 +2,7 @@
   <div class="ppe-list">
     <div class="page-header">
       <h3>库存管理</h3>
-      <el-button type="primary" @click="handleAdd">新增入库</el-button>
+      <el-button type="primary" @click="goToInbound">新增入库</el-button>
     </div>
 
     <!-- 仓库选择器 -->
@@ -32,20 +32,23 @@
       >
         <el-table-column type="expand" width="50">
           <template #default="{ row }">
-            <!-- 展开显示子项（尺码） -->
-            <el-table :data="row.children" v-if="row.children && row.children.length > 0" :show-header="false" border size="small">
-              <el-table-column width="80" />
-              <el-table-column prop="displayName" label="规格" min-width="200" />
-              <el-table-column prop="brand" label="品牌" width="120" />
-              <el-table-column prop="model" label="型号" width="120" />
-              <el-table-column prop="stock" label="库存数量" width="100">
+            <!-- 展开显示子项（尺码明细） -->
+            <el-table :data="row.children" v-if="row.children && row.children.length > 0" border size="small">
+              <el-table-column type="index" label="序号" width="60" align="center" />
+              <el-table-column prop="size" label="尺码/规格" min-width="150">
+                <template #default="{ row: childRow }">
+                  {{ childRow.size || '默认' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="brand" label="品牌" width="150" />
+              <el-table-column prop="model" label="型号" width="150" />
+              <el-table-column prop="stock" label="库存数量" width="100" align="center">
                 <template #default="{ row: childRow }">
                   <el-tag :type="getStockType(childRow)">{{ childRow.stock }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="180">
+              <el-table-column label="操作" width="100" align="center">
                 <template #default="{ row: childRow }">
-                  <el-button type="primary" size="small" @click="handleEdit(childRow)">编辑</el-button>
                   <el-button type="danger" size="small" @click="handleDelete(childRow)">删除</el-button>
                 </template>
               </el-table-column>
@@ -73,72 +76,13 @@
           </template>
         </el-table-column>
         
-        <el-table-column label="操作" width="180" v-if="!isGroupView">
+        <el-table-column label="操作" width="100" v-if="!isGroupView" align="center">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
-
-    <!-- 新增/编辑用品对话框 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
-        <el-form-item label="用品名称" prop="name">
-          <el-input v-model="form.name" placeholder="如：安全鞋、工作服" />
-        </el-form-item>
-        
-        <el-form-item label="所属仓库" prop="warehouse_id">
-          <el-select v-model="form.warehouse_id" style="width: 100%" placeholder="请选择仓库">
-            <el-option
-              v-for="warehouse in warehouseList"
-              :key="warehouse.id"
-              :label="warehouse.name"
-              :value="parseInt(warehouse.id)"
-            />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="类别" prop="category">
-          <el-select v-model="form.category" style="width: 100%" @change="handleCategoryChange" placeholder="请选择类别">
-            <el-option label="安全鞋" value="safety_shoes" />
-            <el-option label="工作服" value="work_clothes" />
-            <el-option label="手套" value="gloves" />
-            <el-option label="安全帽" value="helmet" />
-            <el-option label="口罩" value="mask" />
-          </el-select>
-        </el-form-item>
-        
-        <!-- 尺码选择 - 根据类别动态显示 -->
-        <el-form-item label="尺码" prop="size" v-if="sizeOptions.length > 0">
-          <el-select v-model="form.size" style="width: 100%" placeholder="请选择尺码">
-            <el-option
-              v-for="size in sizeOptions"
-              :key="size"
-              :label="size"
-              :value="size"
-            />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="品牌" prop="brand">
-          <el-input v-model="form.brand" placeholder="可选" />
-        </el-form-item>
-        
-        <el-form-item label="型号" prop="model">
-          <el-input v-model="form.model" placeholder="产品型号（可选）" />
-        </el-form-item>
-        
-        <el-form-item label="库存数量" prop="stock">
-          <el-input-number v-model="form.stock" :min="0" style="width: 100%" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit">确定</el-button>
-      </template>
-    </el-dialog>
 
     <!-- 添加仓库对话框 -->
     <el-dialog v-model="showAddWarehouse" title="添加仓库" width="400px">
@@ -175,37 +119,15 @@ export default {
     // 从 localStorage 读取之前选择的仓库
     const savedWarehouseId = localStorage.getItem('currentWarehouseId');
     const currentWarehouseId = ref(savedWarehouseId ? parseInt(savedWarehouseId) : null);
-    const dialogVisible = ref(false);
     const showAddWarehouse = ref(false);
-    const dialogTitle = ref('新增用品');
-    const formRef = ref(null);
     const warehouseRef = ref(null);
-    const isEdit = ref(false);
     const isGroupView = ref(true); // 是否分组显示
-    const sizeOptions = ref([]); // 尺码选项
-
-    const form = reactive({
-      id: null,
-      name: '',
-      category: '',
-      size: '',
-      stock: 0,
-      warehouse_id: null,
-      brand: '',
-      model: ''
-    });
 
     const warehouseForm = reactive({
       code: '',
       name: '',
       location: ''
     });
-
-    const rules = {
-      name: [{ required: true, message: '请输入用品名称', trigger: 'blur' }],
-      category: [{ required: true, message: '请选择类别', trigger: 'change' }],
-      warehouse_id: [{ required: true, message: '请选择仓库', trigger: 'change' }]
-    };
 
     // 类别名称映射
     const categoryMap = {
@@ -226,23 +148,7 @@ export default {
       return groupRow.children.reduce((sum, item) => sum + (item.stock || 0), 0);
     };
 
-    // 类别改变时获取尺码选项
-    const handleCategoryChange = async (category) => {
-      form.size = '';
-      sizeOptions.value = [];
-      if (!category) return;
-      
-      try {
-        const res = await request.get('/ppe/size-options', {
-          params: { category }
-        });
-        if (res.code === 200) {
-          sizeOptions.value = res.data;
-        }
-      } catch (error) {
-        console.error('获取尺码选项失败:', error);
-      }
-    };
+
 
     const fetchWarehouses = async () => {
       try {
@@ -301,80 +207,38 @@ export default {
       return 'success';
     };
 
-    const handleAdd = () => {
-      // 跳转到入库页面，带上来源参数
-      window.location.href = '/#/ppe-inbound?from=stock&action=add';
-    };
-
-    const handleEdit = (row) => {
-      // 展开 Proxy 查看实际数据
-      const rawRow = JSON.parse(JSON.stringify(row));
-      console.log('编辑行原始数据:', rawRow);
-      console.log('warehouse_id 值:', rawRow.warehouse_id, '类型:', typeof rawRow.warehouse_id);
-      
-      isEdit.value = true;
-      dialogTitle.value = '编辑用品';
-      // 确保仓库列表已加载
-      if (warehouseList.value.length === 0) {
-        fetchWarehouses();
-      }
-      // 转换 warehouse_id 为数字类型
-      let warehouseId = null;
-      if (rawRow.warehouse_id !== undefined && rawRow.warehouse_id !== null) {
-        warehouseId = parseInt(rawRow.warehouse_id);
-      }
-      console.log('转换后的 warehouseId:', warehouseId);
-      
-      Object.assign(form, {
-        id: rawRow.id,
-        name: rawRow.name,
-        category: rawRow.category,
-        size: rawRow.size || '',
-        stock: rawRow.stock,
-        warehouse_id: warehouseId,
-        brand: rawRow.brand || '',
-        model: rawRow.model || ''
-      });
-      console.log('表单数据:', JSON.parse(JSON.stringify(form)));
-      // 如果有类别，加载尺码选项
-      if (rawRow.category) {
-        handleCategoryChange(rawRow.category);
-      }
-      dialogVisible.value = true;
-    };
-
     const handleDelete = async (row) => {
       try {
-        await ElMessageBox.confirm('确定删除该用品吗？', '提示', { type: 'warning' });
-        const res = await request.delete(`/ppe/delete/${row.id}`);
+        // 弹出确认框并要求填写删除原因
+        const { value: reason } = await ElMessageBox.prompt(
+          '请输入删除原因（必填）',
+          '删除确认',
+          {
+            confirmButtonText: '确认删除',
+            cancelButtonText: '取消',
+            type: 'warning',
+            inputValidator: (value) => {
+              if (!value || value.trim() === '') {
+                return '删除原因不能为空';
+              }
+              return true;
+            }
+          }
+        );
+        
+        const res = await request.delete(`/ppe/delete/${row.id}`, {
+          data: { reason: reason.trim() }
+        });
+        
         if (res.code === 200) {
           ElMessage.success('删除成功');
           fetchData();
         }
       } catch (error) {
-        console.error('删除失败:', error);
-      }
-    };
-
-    const handleSubmit = async () => {
-      try {
-        await formRef.value.validate();
-        const url = isEdit.value ? '/ppe/update' : '/ppe/add';
-        
-        // 转换字段名：前端用 stock，后端用 quantity
-        const submitData = {
-          ...form,
-          quantity: form.stock  // 将 stock 转为 quantity 提交给后端
-        };
-        
-        const res = await request.post(url, submitData);
-        if (res.code === 200) {
-          ElMessage.success(isEdit.value ? '更新成功' : '添加成功');
-          dialogVisible.value = false;
-          fetchData();
+        // 用户取消不报错
+        if (error !== 'cancel') {
+          console.error('删除失败:', error);
         }
-      } catch (error) {
-        console.error('提交失败:', error);
       }
     };
 
@@ -396,6 +260,11 @@ export default {
       }
     };
 
+    const goToInbound = () => {
+      // 跳转到入库页面
+      window.location.href = '/#/ppe-inbound?from=stock&action=add';
+    };
+
     onMounted(() => {
       fetchWarehouses();
       fetchData();
@@ -406,25 +275,16 @@ export default {
       tableData,
       warehouseList,
       currentWarehouseId,
-      dialogVisible,
       showAddWarehouse,
-      dialogTitle,
-      formRef,
       warehouseRef,
-      form,
       warehouseForm,
-      rules,
       isGroupView,
-      sizeOptions,
       getCategoryName,
       getTotalStock,
-      handleCategoryChange,
       getStockType,
-      handleAdd,
-      handleEdit,
       handleDelete,
-      handleSubmit,
-      handleAddWarehouse
+      handleAddWarehouse,
+      goToInbound
     };
   }
 };
