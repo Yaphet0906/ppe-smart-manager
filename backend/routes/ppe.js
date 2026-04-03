@@ -26,7 +26,7 @@ router.get('/list', authMiddleware, async (req, res) => {
   try {
     const { warehouse_id, group_by_name } = req.query;
     
-    let query = 'SELECT id, name, brand, model, size, category_code as category, specification, unit, quantity as stock, quantity as quantity, safety_stock as min_stock, status FROM inv_items WHERE tenant_id = ? AND deleted_at IS NULL';
+    let query = 'SELECT id, name, warehouse_id, brand, model, size, category_code as category, specification, unit, quantity as stock, quantity as quantity, safety_stock as min_stock, status FROM inv_items WHERE tenant_id = ? AND deleted_at IS NULL';
     let params = [req.companyId];
     
     // 如果指定了仓库，按仓库筛选
@@ -75,20 +75,46 @@ router.get('/list', authMiddleware, async (req, res) => {
   }
 });
 
-// 添加用品（使用新表 inv_items，支持尺码）
+// 添加用品（使用新表 inv_items，支持尺码，同时记录入库历史）
 router.post('/add', authMiddleware, async (req, res) => {
+  const { name, category, specification, unit, quantity, safety_stock, brand, model, size, warehouse_id, type } = req.body;
+  const categoryCode = category || type || 'other';
+  const itemQuantity = quantity || 0;
+  
+  const connection = await pool.getConnection();
+  await connection.beginTransaction();
+  
   try {
-    const { name, category, specification, unit, quantity, safety_stock, brand, model, size, warehouse_id, type } = req.body;
-    const categoryCode = category || type || 'other';
-    
-    const [result] = await pool.query(
+    // 1. 创建物品
+    const [result] = await connection.query(
       'INSERT INTO inv_items (tenant_id, warehouse_id, name, category_code, specification, unit, quantity, safety_stock, brand, model, size, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [req.companyId, warehouse_id || null, name, categoryCode, specification, unit || '件', quantity || 0, safety_stock || 10, brand, model, size, 1]
+      [req.companyId, warehouse_id || null, name, categoryCode, specification, unit || '件', itemQuantity, safety_stock || 10, brand, model, size, 1]
     );
-    res.json({ code: 200, msg: '添加成功', data: { id: result.insertId } });
+    const itemId = result.insertId;
+    
+    // 2. 如果有库存，记录入库历史
+    if (itemQuantity > 0) {
+      // 插入入库记录
+      const [inboundResult] = await connection.query(
+        'INSERT INTO inv_inbound (tenant_id, warehouse_id, item_id, quantity, source_type, remark, operator_id, operator_name, inbound_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE())',
+        [req.companyId, warehouse_id || null, itemId, itemQuantity, 'manual', '新增用品入库', req.userId, req.userName || 'admin']
+      );
+      
+      // 插入库存流水
+      await connection.query(
+        'INSERT INTO inv_transactions (tenant_id, warehouse_id, item_id, type, quantity, before_qty, after_qty, source_id, source_no, operator_id, operator_name, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [req.companyId, warehouse_id || null, itemId, 'inbound', itemQuantity, 0, itemQuantity, inboundResult.insertId, 'RK' + Date.now(), req.userId, req.userName || 'admin', '新增用品: ' + name]
+      );
+    }
+    
+    await connection.commit();
+    res.json({ code: 200, msg: '添加成功', data: { id: itemId } });
   } catch (error) {
+    await connection.rollback();
     console.error('添加用品错误:', error);
     res.json({ code: 500, msg: '服务器错误: ' + error.message });
+  } finally {
+    connection.release();
   }
 });
 
