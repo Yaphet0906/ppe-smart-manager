@@ -21,55 +21,69 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
-// 获取用品列表（支持按仓库筛选）
+// 获取用品列表（支持按仓库筛选，支持分组显示）
 router.get('/list', authMiddleware, async (req, res) => {
   try {
-    const { warehouse_id } = req.query;
-    console.log('【调试】原始 warehouse_id:', warehouse_id, '类型:', typeof warehouse_id);
+    const { warehouse_id, group_by_name } = req.query;
     
-    let query = 'SELECT id, name, brand, model, category_code as category, specification, unit, quantity as stock, quantity as quantity, safety_stock as min_stock, status FROM inv_items WHERE tenant_id = ? AND deleted_at IS NULL';
+    let query = 'SELECT id, name, brand, model, size, category_code as category, specification, unit, quantity as stock, quantity as quantity, safety_stock as min_stock, status FROM inv_items WHERE tenant_id = ? AND deleted_at IS NULL';
     let params = [req.companyId];
     
     // 如果指定了仓库，按仓库筛选
     if (warehouse_id && warehouse_id !== 'null' && warehouse_id !== '' && warehouse_id !== 'undefined') {
       const warehouseIdInt = parseInt(warehouse_id);
-      console.log('【调试】转换后的 warehouse_id:', warehouseIdInt);
       query += ' AND warehouse_id = ?';
       params.push(warehouseIdInt);
     }
     
-    query += ' ORDER BY id DESC';
-    
-    console.log('【调试】最终 SQL:', query);
-    console.log('【调试】参数:', params);
+    query += ' ORDER BY name, size';
     
     const [rows] = await pool.query(query, params);
-    console.log('【调试】查询结果条数:', rows.length);
-    console.log('【调试】查询结果:', rows);
     
-    // 转换数据格式，适配前端
-    const formattedRows = rows.map(row => ({
-      ...row,
-      type: row.category || '-',
-      stock_status: row.quantity <= row.min_stock ? 'low' : 'normal'
-    }));
-    
-    res.json({ code: 200, data: formattedRows });
+    // 如果需要分组（展开式显示）
+    if (group_by_name === 'true') {
+      const grouped = {};
+      rows.forEach(row => {
+        if (!grouped[row.name]) {
+          grouped[row.name] = {
+            id: 'group-' + row.name,
+            name: row.name,
+            category: row.category,
+            isGroup: true,
+            children: []
+          };
+        }
+        grouped[row.name].children.push({
+          ...row,
+          type: row.category || '-',
+          displayName: `${row.name} - ${row.size || '均码'}`
+        });
+      });
+      res.json({ code: 200, data: Object.values(grouped) });
+    } else {
+      // 扁平列表
+      const formattedRows = rows.map(row => ({
+        ...row,
+        type: row.category || '-',
+        displayName: `${row.name}${row.size ? ' - ' + row.size : ''}`
+      }));
+      res.json({ code: 200, data: formattedRows });
+    }
   } catch (error) {
     console.error('获取用品列表错误:', error);
     res.json({ code: 500, msg: '服务器错误: ' + error.message });
   }
 });
 
-// 添加用品（使用新表 inv_items）
+// 添加用品（使用新表 inv_items，支持尺码）
 router.post('/add', authMiddleware, async (req, res) => {
   try {
-    const { name, category, specification, unit, quantity, safety_stock, brand, model, warehouse_id, type } = req.body;
+    const { name, category, specification, unit, quantity, safety_stock, brand, model, size, warehouse_id, type } = req.body;
     const categoryCode = category || type || 'other';
     
     const [result] = await pool.query(
-      'INSERT INTO inv_items (tenant_id, warehouse_id, name, category_code, specification, unit, quantity, safety_stock, brand, model, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [req.companyId, warehouse_id || null, name, categoryCode, specification, unit || '件', quantity || 0, safety_stock || 10, brand, model, 1]
+      'INSERT INTO inv_items (tenant_id, warehouse_id, name, category_code, specification, unit, quantity, safety_stock, brand, model, size, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [req.companyId, warehouse_id || null, name, categoryCode, specification, unit || '件', quantity || 0, safety_stock || 10, brand, model, size, 1]
     );
     res.json({ code: 200, msg: '添加成功', data: { id: result.insertId } });
   } catch (error) {
@@ -78,15 +92,15 @@ router.post('/add', authMiddleware, async (req, res) => {
   }
 });
 
-// 更新用品（使用新表 inv_items）
+// 更新用品（使用新表 inv_items，支持尺码）
 router.post('/update', authMiddleware, async (req, res) => {
   try {
-    const { id, name, category, specification, unit, quantity, safety_stock, brand, model, warehouse_id, type } = req.body;
+    const { id, name, category, specification, unit, quantity, safety_stock, brand, model, size, warehouse_id, type } = req.body;
     const categoryCode = category || type;
     
     await pool.query(
-      'UPDATE inv_items SET name = ?, category_code = ?, specification = ?, unit = ?, quantity = ?, safety_stock = ?, brand = ?, model = ?, warehouse_id = ? WHERE id = ? AND tenant_id = ?',
-      [name, categoryCode, specification, unit, quantity, safety_stock, brand, model, warehouse_id || null, id, req.companyId]
+      'UPDATE inv_items SET name = ?, category_code = ?, specification = ?, unit = ?, quantity = ?, safety_stock = ?, brand = ?, model = ?, size = ?, warehouse_id = ? WHERE id = ? AND tenant_id = ?',
+      [name, categoryCode, specification, unit, quantity, safety_stock, brand, model, size, warehouse_id || null, id, req.companyId]
     );
     res.json({ code: 200, msg: '更新成功' });
   } catch (error) {
@@ -389,6 +403,30 @@ router.post('/warehouse-delete', authMiddleware, async (req, res) => {
     );
     res.json({ code: 200, msg: '删除成功' });
   } catch (error) {
+    res.json({ code: 500, msg: '服务器错误' });
+  }
+});
+
+// 获取类别对应的尺码选项（任务4：尺码管理）
+router.get('/size-options', authMiddleware, async (req, res) => {
+  try {
+    const { category } = req.query;
+    
+    if (!category) {
+      return res.json({ code: 400, msg: '请提供类别' });
+    }
+    
+    const [rows] = await pool.query(
+      'SELECT size_value FROM sys_size_config WHERE category_code = ? ORDER BY sort_order',
+      [category]
+    );
+    
+    res.json({ 
+      code: 200, 
+      data: rows.map(r => r.size_value) 
+    });
+  } catch (error) {
+    console.error('获取尺码选项错误:', error);
     res.json({ code: 500, msg: '服务器错误' });
   }
 });

@@ -22,25 +22,58 @@
     </el-card>
 
     <el-card>
-      <el-table :data="tableData" v-loading="loading" border>
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="name" label="用品名称" />
-        <el-table-column prop="brand" label="品牌" width="120" />
-        <el-table-column prop="model" label="型号" width="120" />
-        <el-table-column prop="type" label="类型" width="120" />
-        <el-table-column prop="stock" label="库存数量" width="100">
+      <!-- 展开式表格 -->
+      <el-table 
+        :data="tableData" 
+        v-loading="loading" 
+        border
+        row-key="id"
+        :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
+      >
+        <el-table-column type="expand" width="50">
           <template #default="{ row }">
-            <el-tag :type="getStockType(row)">{{ row.stock }}</el-tag>
+            <!-- 展开显示子项（尺码） -->
+            <el-table :data="row.children" v-if="row.children && row.children.length > 0" :show-header="false" border size="small">
+              <el-table-column width="80" />
+              <el-table-column prop="displayName" label="规格" min-width="200" />
+              <el-table-column prop="brand" label="品牌" width="120" />
+              <el-table-column prop="model" label="型号" width="120" />
+              <el-table-column prop="stock" label="库存数量" width="100">
+                <template #default="{ row: childRow }">
+                  <el-tag :type="getStockType(childRow)">{{ childRow.stock }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="180">
+                <template #default="{ row: childRow }">
+                  <el-button type="primary" size="small" @click="handleEdit(childRow)">编辑</el-button>
+                  <el-button type="danger" size="small" @click="handleDelete(childRow)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100">
+        
+        <el-table-column prop="name" label="用品名称" min-width="200">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'normal' ? 'success' : row.status === 'low' ? 'warning' : 'danger'">
-              {{ getStatusText(row.status) }}
-            </el-tag>
+            <span v-if="row.isGroup" style="font-weight: bold;">{{ row.name }}</span>
+            <span v-else>{{ row.displayName }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180">
+        
+        <el-table-column prop="category" label="类别" width="120">
+          <template #default="{ row }">
+            {{ getCategoryName(row.category) }}
+          </template>
+        </el-table-column>
+        
+        <el-table-column label="总库存" width="100" v-if="isGroupView">
+          <template #default="{ row }">
+            <el-tag v-if="row.isGroup" type="info">{{ getTotalStock(row) }}</el-tag>
+            <el-tag v-else :type="getStockType(row)">{{ row.stock }}</el-tag>
+          </template>
+        </el-table-column>
+        
+        <el-table-column label="操作" width="180" v-if="!isGroupView">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
             <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
@@ -51,10 +84,11 @@
 
     <!-- 新增/编辑用品对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="80px">
+      <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
         <el-form-item label="用品名称" prop="name">
-          <el-input v-model="form.name" />
+          <el-input v-model="form.name" placeholder="如：安全鞋、工作服" />
         </el-form-item>
+        
         <el-form-item label="所属仓库" prop="warehouse_id">
           <el-select v-model="form.warehouse_id" style="width: 100%" placeholder="请选择仓库">
             <el-option
@@ -65,21 +99,37 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="类型" prop="type">
-          <el-select v-model="form.type" style="width: 100%">
-            <el-option label="口罩" value="口罩" />
-            <el-option label="手套" value="手套" />
-            <el-option label="防护服" value="防护服" />
-            <el-option label="护目镜" value="护目镜" />
-            <el-option label="安全帽" value="安全帽" />
+        
+        <el-form-item label="类别" prop="category">
+          <el-select v-model="form.category" style="width: 100%" @change="handleCategoryChange" placeholder="请选择类别">
+            <el-option label="安全鞋" value="safety_shoes" />
+            <el-option label="工作服" value="work_clothes" />
+            <el-option label="手套" value="gloves" />
+            <el-option label="安全帽" value="helmet" />
+            <el-option label="口罩" value="mask" />
           </el-select>
         </el-form-item>
+        
+        <!-- 尺码选择 - 根据类别动态显示 -->
+        <el-form-item label="尺码" prop="size" v-if="sizeOptions.length > 0">
+          <el-select v-model="form.size" style="width: 100%" placeholder="请选择尺码">
+            <el-option
+              v-for="size in sizeOptions"
+              :key="size"
+              :label="size"
+              :value="size"
+            />
+          </el-select>
+        </el-form-item>
+        
         <el-form-item label="品牌" prop="brand">
           <el-input v-model="form.brand" placeholder="可选" />
         </el-form-item>
+        
         <el-form-item label="型号" prop="model">
-          <el-input v-model="form.model" placeholder="可选" />
+          <el-input v-model="form.model" placeholder="产品型号（可选）" />
         </el-form-item>
+        
         <el-form-item label="库存数量" prop="stock">
           <el-input-number v-model="form.stock" :min="0" style="width: 100%" />
         </el-form-item>
@@ -129,11 +179,14 @@ export default {
     const formRef = ref(null);
     const warehouseRef = ref(null);
     const isEdit = ref(false);
+    const isGroupView = ref(true); // 是否分组显示
+    const sizeOptions = ref([]); // 尺码选项
 
     const form = reactive({
       id: null,
       name: '',
-      type: '',
+      category: '',
+      size: '',
       stock: 0,
       warehouse_id: null,
       brand: '',
@@ -148,8 +201,45 @@ export default {
 
     const rules = {
       name: [{ required: true, message: '请输入用品名称', trigger: 'blur' }],
-      type: [{ required: true, message: '请选择类型', trigger: 'change' }],
-      stock: [{ required: true, message: '请输入库存数量', trigger: 'blur' }]
+      category: [{ required: true, message: '请选择类别', trigger: 'change' }],
+      warehouse_id: [{ required: true, message: '请选择仓库', trigger: 'change' }]
+    };
+
+    // 类别名称映射
+    const categoryMap = {
+      'safety_shoes': '安全鞋',
+      'work_clothes': '工作服',
+      'gloves': '手套',
+      'helmet': '安全帽',
+      'mask': '口罩'
+    };
+
+    const getCategoryName = (code) => {
+      return categoryMap[code] || code || '-';
+    };
+
+    // 计算分组的总库存
+    const getTotalStock = (groupRow) => {
+      if (!groupRow.children) return 0;
+      return groupRow.children.reduce((sum, item) => sum + (item.stock || 0), 0);
+    };
+
+    // 类别改变时获取尺码选项
+    const handleCategoryChange = async (category) => {
+      form.size = '';
+      sizeOptions.value = [];
+      if (!category) return;
+      
+      try {
+        const res = await request.get('/ppe/size-options', {
+          params: { category }
+        });
+        if (res.code === 200) {
+          sizeOptions.value = res.data;
+        }
+      } catch (error) {
+        console.error('获取尺码选项失败:', error);
+      }
     };
 
     const fetchWarehouses = async () => {
@@ -171,11 +261,12 @@ export default {
       loading.value = true;
       try {
         const warehouseId = parseInt(currentWarehouseId.value);
-        console.log('正在获取仓库数据:', warehouseId);
         const res = await request.get('/ppe/list', {
-          params: { warehouse_id: warehouseId }
+          params: { 
+            warehouse_id: warehouseId,
+            group_by_name: isGroupView.value
+          }
         });
-        console.log('返回数据:', res);
         if (res.code === 200) {
           tableData.value = res.data;
         }
@@ -196,30 +287,40 @@ export default {
       return 'success';
     };
 
-    const getStatusText = (status) => {
-      const map = { normal: '正常', low: '偏低', out: '告急' };
-      return map[status] || status;
-    };
-
     const handleAdd = () => {
       isEdit.value = false;
       dialogTitle.value = '新增用品';
       Object.assign(form, { 
         id: null, 
         name: '', 
-        type: '', 
+        category: '', 
+        size: '',
         stock: 0, 
         warehouse_id: currentWarehouseId.value,
         brand: '',
         model: ''
       });
+      sizeOptions.value = [];
       dialogVisible.value = true;
     };
 
     const handleEdit = (row) => {
       isEdit.value = true;
       dialogTitle.value = '编辑用品';
-      Object.assign(form, row);
+      Object.assign(form, {
+        id: row.id,
+        name: row.name,
+        category: row.category,
+        size: row.size || '',
+        stock: row.stock,
+        warehouse_id: row.warehouse_id,
+        brand: row.brand || '',
+        model: row.model || ''
+      });
+      // 如果有类别，加载尺码选项
+      if (row.category) {
+        handleCategoryChange(row.category);
+      }
       dialogVisible.value = true;
     };
 
@@ -287,8 +388,12 @@ export default {
       form,
       warehouseForm,
       rules,
+      isGroupView,
+      sizeOptions,
+      getCategoryName,
+      getTotalStock,
+      handleCategoryChange,
       getStockType,
-      getStatusText,
       handleAdd,
       handleEdit,
       handleDelete,

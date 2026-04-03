@@ -47,12 +47,14 @@
         <div class="header-right">
           <el-dropdown @command="handleCommand">
             <span class="user-info">
+              <el-icon><User /></el-icon>
               {{ userStore.userInfo?.name || '用户' }}
               <el-icon><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+                <el-dropdown-item command="profile">个人信息</el-dropdown-item>
+                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -63,32 +65,61 @@
         <router-view />
       </el-main>
     </el-container>
+
+    <!-- 个人信息抽屉 -->
+    <el-drawer v-model="profileVisible" title="个人信息" size="400px">
+      <el-descriptions :column="1" border v-if="userProfile">
+        <el-descriptions-item label="用户名">{{ userProfile.name }}</el-descriptions-item>
+        <el-descriptions-item label="角色">{{ userProfile.role === 'admin' ? '管理员' : '操作员' }}</el-descriptions-item>
+        <el-descriptions-item label="所属公司">{{ userProfile.company_name }}</el-descriptions-item>
+        <el-descriptions-item label="公司代码">{{ userProfile.company_code }}</el-descriptions-item>
+        <el-descriptions-item label="手机号">{{ userProfile.phone || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="邮箱">{{ userProfile.email || '-' }}</el-descriptions-item>
+      </el-descriptions>
+    </el-drawer>
   </el-container>
 </template>
 
 <script>
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '../store';
-import { HomeFilled, Box, Download, Upload, ArrowDown, Camera, FullScreen } from '@element-plus/icons-vue';
+import { HomeFilled, Box, Download, Upload, ArrowDown, Camera, FullScreen, User } from '@element-plus/icons-vue';
+import request from '../utils/request';
 
 export default {
   name: 'Layout',
   components: {
-    HomeFilled, Box, Download, Upload, ArrowDown, Camera, FullScreen
+    HomeFilled, Box, Download, Upload, ArrowDown, Camera, FullScreen, User
   },
   setup() {
     const router = useRouter();
     const userStore = useUserStore();
+    const profileVisible = ref(false);
+    const userProfile = ref(null);
 
-    const handleCommand = (command) => {
+    const handleCommand = async (command) => {
       if (command === 'logout') {
         userStore.logout();
         router.push('/login');
+      } else if (command === 'profile') {
+        // 获取用户信息
+        try {
+          const res = await request.get('/user/profile');
+          if (res.code === 200) {
+            userProfile.value = res.data;
+            profileVisible.value = true;
+          }
+        } catch (error) {
+          console.error('获取用户信息失败:', error);
+        }
       }
     };
 
     return {
       userStore,
+      profileVisible,
+      userProfile,
       handleCommand
     };
   }

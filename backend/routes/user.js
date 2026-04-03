@@ -281,4 +281,34 @@ router.post('/change-password', async (req, res) => {
   }
 });
 
+// 获取当前登录用户信息（任务1：管理员信息展示）
+router.get('/profile', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.json({ code: 401, msg: '未登录' });
+    }
+
+    const decoded = jwt.verify(token, SECRET_KEY);
+    
+    const [users] = await pool.query(
+      `SELECT u.id, u.name, u.phone, u.email, u.role, 
+              t.id as company_id, t.name as company_name, t.code as company_code
+       FROM core_users u
+       LEFT JOIN core_tenants t ON u.tenant_id = t.id
+       WHERE u.id = ?`,
+      [decoded.id]
+    );
+    
+    if (users.length === 0) {
+      return res.json({ code: 404, msg: '用户不存在' });
+    }
+    
+    res.json({ code: 200, data: users[0] });
+  } catch (error) {
+    console.error('获取用户信息错误:', error);
+    res.json({ code: 500, msg: '服务器错误' });
+  }
+});
+
 module.exports = router;
