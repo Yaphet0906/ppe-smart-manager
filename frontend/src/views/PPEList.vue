@@ -2,7 +2,7 @@
   <div class="ppe-list">
     <div class="page-header">
       <h3>库存管理</h3>
-      <el-button type="primary" @click="handleAdd">新增用品</el-button>
+      <el-button type="primary" @click="handleAdd">新增入库</el-button>
     </div>
 
     <!-- 仓库选择器 -->
@@ -95,7 +95,7 @@
               v-for="warehouse in warehouseList"
               :key="warehouse.id"
               :label="warehouse.name"
-              :value="warehouse.id"
+              :value="parseInt(warehouse.id)"
             />
           </el-select>
         </el-form-item>
@@ -172,7 +172,9 @@ export default {
     const loading = ref(false);
     const tableData = ref([]);
     const warehouseList = ref([]);
-    const currentWarehouseId = ref(null);
+    // 从 localStorage 读取之前选择的仓库
+    const savedWarehouseId = localStorage.getItem('currentWarehouseId');
+    const currentWarehouseId = ref(savedWarehouseId ? parseInt(savedWarehouseId) : null);
     const dialogVisible = ref(false);
     const showAddWarehouse = ref(false);
     const dialogTitle = ref('新增用品');
@@ -247,8 +249,16 @@ export default {
         const res = await request.get('/ppe/warehouse-list');
         if (res.code === 200) {
           warehouseList.value = res.data;
-          if (res.data.length > 0 && !currentWarehouseId.value) {
-            currentWarehouseId.value = res.data[0].id;
+          // 检查保存的仓库ID是否还在列表中
+          const savedId = localStorage.getItem('currentWarehouseId');
+          const savedIdInt = savedId ? parseInt(savedId) : null;
+          const warehouseExists = res.data.find(w => w.id === savedIdInt);
+          
+          if (res.data.length > 0) {
+            if (!currentWarehouseId.value || !warehouseExists) {
+              // 如果没有保存的仓库或保存的仓库已不存在，选择第一个
+              currentWarehouseId.value = res.data[0].id;
+            }
           }
         }
       } catch (error) {
@@ -277,7 +287,11 @@ export default {
       }
     };
 
-    watch(currentWarehouseId, () => {
+    watch(currentWarehouseId, (newVal) => {
+      // 保存到 localStorage
+      if (newVal) {
+        localStorage.setItem('currentWarehouseId', newVal);
+      }
       fetchData();
     });
 
@@ -288,38 +302,43 @@ export default {
     };
 
     const handleAdd = () => {
-      isEdit.value = false;
-      dialogTitle.value = '新增用品';
-      Object.assign(form, { 
-        id: null, 
-        name: '', 
-        category: '', 
-        size: '',
-        stock: 0, 
-        warehouse_id: currentWarehouseId.value,
-        brand: '',
-        model: ''
-      });
-      sizeOptions.value = [];
-      dialogVisible.value = true;
+      // 跳转到入库页面，带上来源参数
+      window.location.href = '/#/ppe-inbound?from=stock&action=add';
     };
 
     const handleEdit = (row) => {
+      // 展开 Proxy 查看实际数据
+      const rawRow = JSON.parse(JSON.stringify(row));
+      console.log('编辑行原始数据:', rawRow);
+      console.log('warehouse_id 值:', rawRow.warehouse_id, '类型:', typeof rawRow.warehouse_id);
+      
       isEdit.value = true;
       dialogTitle.value = '编辑用品';
+      // 确保仓库列表已加载
+      if (warehouseList.value.length === 0) {
+        fetchWarehouses();
+      }
+      // 转换 warehouse_id 为数字类型
+      let warehouseId = null;
+      if (rawRow.warehouse_id !== undefined && rawRow.warehouse_id !== null) {
+        warehouseId = parseInt(rawRow.warehouse_id);
+      }
+      console.log('转换后的 warehouseId:', warehouseId);
+      
       Object.assign(form, {
-        id: row.id,
-        name: row.name,
-        category: row.category,
-        size: row.size || '',
-        stock: row.stock,
-        warehouse_id: row.warehouse_id,
-        brand: row.brand || '',
-        model: row.model || ''
+        id: rawRow.id,
+        name: rawRow.name,
+        category: rawRow.category,
+        size: rawRow.size || '',
+        stock: rawRow.stock,
+        warehouse_id: warehouseId,
+        brand: rawRow.brand || '',
+        model: rawRow.model || ''
       });
+      console.log('表单数据:', JSON.parse(JSON.stringify(form)));
       // 如果有类别，加载尺码选项
-      if (row.category) {
-        handleCategoryChange(row.category);
+      if (rawRow.category) {
+        handleCategoryChange(rawRow.category);
       }
       dialogVisible.value = true;
     };
@@ -341,7 +360,14 @@ export default {
       try {
         await formRef.value.validate();
         const url = isEdit.value ? '/ppe/update' : '/ppe/add';
-        const res = await request.post(url, form);
+        
+        // 转换字段名：前端用 stock，后端用 quantity
+        const submitData = {
+          ...form,
+          quantity: form.stock  // 将 stock 转为 quantity 提交给后端
+        };
+        
+        const res = await request.post(url, submitData);
         if (res.code === 200) {
           ElMessage.success(isEdit.value ? '更新成功' : '添加成功');
           dialogVisible.value = false;
