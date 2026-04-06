@@ -1,25 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
-const jwt = require('jsonwebtoken');
-
-const SECRET_KEY = process.env.SECRET_KEY || 'default-secret-key';
-
-// 验证 token 中间件
-const authMiddleware = async (req, res, next) => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.json({ code: 401, msg: '未登录' });
-    }
-    const decoded = jwt.verify(token, SECRET_KEY);
-    req.companyId = decoded.companyId;
-    req.userId = decoded.id;
-    next();
-  } catch (error) {
-    return res.json({ code: 401, msg: 'token无效' });
-  }
-};
+const authMiddleware = require('../middleware/auth');
 
 // 获取用品列表（支持按仓库筛选，支持分组显示）
 router.get('/list', authMiddleware, async (req, res) => {

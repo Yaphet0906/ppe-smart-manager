@@ -22,9 +22,8 @@ module.exports = defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
-        changeOrigin: true,
-        pathRewrite: { '^/api': '' },
-        logLevel: 'debug'
+        changeOrigin: true
+        // 注意：后端路由已经是 /api/xxx 格式，不需要 pathRewrite
       }
     }
   }

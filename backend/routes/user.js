@@ -4,7 +4,13 @@ const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-const SECRET_KEY = process.env.SECRET_KEY || 'default-secret-key';
+const SECRET_KEY = process.env.SECRET_KEY;
+
+// 检查必要的环境变量
+if (!SECRET_KEY) {
+  console.error('错误: SECRET_KEY 环境变量未设置');
+  process.exit(1);
+}
 
 // 生成随机公司代码（仅用于数据库内部，不对用户显示）
 const generateCompanyCode = () => {
@@ -85,7 +91,7 @@ router.get('/info', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
-      return res.json({ code: 401, msg: '未登录' });
+      return res.status(401).json({ code: 401, msg: '未登录' });
     }
     
     const decoded = jwt.verify(token, SECRET_KEY);
@@ -94,7 +100,7 @@ router.get('/info', async (req, res) => {
       data: decoded
     });
   } catch (error) {
-    res.json({ code: 401, msg: 'token无效' });
+    res.status(401).json({ code: 401, msg: 'token无效' });
   }
 });
 
@@ -251,7 +257,7 @@ router.post('/change-password', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
-      return res.json({ code: 401, msg: '未登录' });
+      return res.status(401).json({ code: 401, msg: '未登录' });
     }
 
     const decoded = jwt.verify(token, SECRET_KEY);
@@ -300,7 +306,7 @@ router.get('/profile', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
-      return res.json({ code: 401, msg: '未登录' });
+      return res.status(401).json({ code: 401, msg: '未登录' });
     }
 
     const decoded = jwt.verify(token, SECRET_KEY);
