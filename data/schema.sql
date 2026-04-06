@@ -1,316 +1,481 @@
--- =====================================================
--- PPE智能管理系统 - 数据库Schema
--- PPE Smart Management System Database Schema
--- 版本: 1.0.0
--- 创建日期: 2024
--- =====================================================
+-- =============================================================================
+-- PPE Smart Manager - 完整数据库结构 (精简版)
+-- 作者: 数据库架构师
+-- 版本: 1.0
+-- 日期: 2026-03-28
+-- 说明: 小工具定位，无成本模块，高扩展性设计
+-- =============================================================================
 
--- 设置字符集和存储引擎
+-- 设置字符集和排序规则
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
--- 创建数据库（如果不存在）
-CREATE DATABASE IF NOT EXISTS ppe_smart_manager
-    DEFAULT CHARACTER SET utf8mb4
-    DEFAULT COLLATE utf8mb4_unicode_ci;
+-- =============================================================================
+-- 核心模块表
+-- =============================================================================
 
-USE ppe_smart_manager;
+-- 租户表 (core_tenants)
+CREATE TABLE IF NOT EXISTS core_tenants (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(32) UNIQUE COMMENT '公司代码',
+    name VARCHAR(100) NOT NULL COMMENT '公司名称',
+    contact_name VARCHAR(50) COMMENT '联系人姓名',
+    contact_phone VARCHAR(20) COMMENT '联系电话',
+    status TINYINT DEFAULT 1 COMMENT '状态: 0禁用 1启用',
+    
+    -- 扩展配置
+    config JSON COMMENT '扩展配置',
+    
+    -- 预留字段（10个）
+    ext_1 VARCHAR(100) COMMENT '扩展字段1',
+    ext_2 VARCHAR(100) COMMENT '扩展字段2', 
+    ext_3 VARCHAR(100) COMMENT '扩展字段3',
+    ext_4 VARCHAR(100) COMMENT '扩展字段4',
+    ext_5 VARCHAR(100) COMMENT '扩展字段5',
+    ext_6 VARCHAR(100) COMMENT '扩展字段6',
+    ext_7 VARCHAR(100) COMMENT '扩展字段7',
+    ext_8 VARCHAR(100) COMMENT '扩展字段8',
+    ext_9 VARCHAR(100) COMMENT '扩展字段9',
+    ext_10 TEXT COMMENT '扩展字段10',
+    
+    -- 审计字段
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
+    created_by BIGINT UNSIGNED COMMENT '创建人ID',
+    updated_by BIGINT UNSIGNED COMMENT '更新人ID'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- =====================================================
--- 1. 用户表 (users)
--- 存储系统用户信息，包括管理员、员工和老板
--- =====================================================
-DROP TABLE IF EXISTS `users`;
-CREATE TABLE `users` (
-    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '用户ID，主键自增',
-    `name` VARCHAR(100) NOT NULL COMMENT '用户姓名',
-    `phone` VARCHAR(20) NOT NULL COMMENT '联系电话，唯一',
-    `department` VARCHAR(100) DEFAULT NULL COMMENT '所属部门',
-    `role` ENUM('admin', 'employee', 'boss') NOT NULL DEFAULT 'employee' COMMENT '用户角色：admin-管理员, employee-员工, boss-老板',
-    `password_hash` VARCHAR(255) DEFAULT NULL COMMENT '密码哈希（可选，用于系统登录）',
-    `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：0-禁用, 1-启用',
-    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_phone` (`phone`),
-    KEY `idx_role` (`role`),
-    KEY `idx_department` (`department`),
-    KEY `idx_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表 - 存储系统用户信息';
+-- 用户表 (core_users)
+CREATE TABLE IF NOT EXISTS core_users (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tenant_id BIGINT UNSIGNED NOT NULL COMMENT '租户ID',
+    
+    -- 基础信息
+    employee_no VARCHAR(50) COMMENT '工号',
+    name VARCHAR(50) NOT NULL COMMENT '姓名',
+    phone VARCHAR(20) COMMENT '手机号',
+    email VARCHAR(100) COMMENT '邮箱',
+    password VARCHAR(255) COMMENT '密码',
+    department VARCHAR(50) COMMENT '部门',
+    position VARCHAR(50) COMMENT '职位',
+    role VARCHAR(20) DEFAULT 'user' COMMENT '角色: admin/user/viewer',
+    
+    -- 扩展信息（预留）
+    id_card VARCHAR(18) COMMENT '身份证号',
+    gender VARCHAR(10) COMMENT '性别',
+    birthday DATE COMMENT '生日',
+    entry_date DATE COMMENT '入职日期',
+    job_type VARCHAR(50) COMMENT '工种',
+    work_area VARCHAR(100) COMMENT '工作区域',
+    
+    -- 状态管理
+    status TINYINT DEFAULT 1 COMMENT '状态: 0禁用 1启用',
+    is_first_login TINYINT DEFAULT 1 COMMENT '是否首次登录: 0否 1是',
+    last_login_at TIMESTAMP COMMENT '最后登录时间',
+    
+    -- 预留字段（10个）
+    ext_1 VARCHAR(100) COMMENT '扩展字段1',
+    ext_2 VARCHAR(100) COMMENT '扩展字段2',
+    ext_3 VARCHAR(100) COMMENT '扩展字段3',
+    ext_4 VARCHAR(100) COMMENT '扩展字段4',
+    ext_5 VARCHAR(100) COMMENT '扩展字段5',
+    ext_6 VARCHAR(100) COMMENT '扩展字段6',
+    ext_7 VARCHAR(100) COMMENT '扩展字段7',
+    ext_8 VARCHAR(100) COMMENT '扩展字段8',
+    ext_9 VARCHAR(100) COMMENT '扩展字段9',
+    ext_10 TEXT COMMENT '扩展字段10',
+    
+    -- 审计字段
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- =====================================================
--- 2. PPE物品表 (ppe_items)
--- 存储劳保用品的基础信息和库存信息
--- =====================================================
-DROP TABLE IF EXISTS `ppe_items`;
-CREATE TABLE `ppe_items` (
-    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '物品ID，主键自增',
-    `name` VARCHAR(100) NOT NULL COMMENT '物品名称，如：安全帽、防护手套',
-    `brand` VARCHAR(100) DEFAULT NULL COMMENT '品牌，如：3M、霍尼韦尔',
-    `size` VARCHAR(50) DEFAULT NULL COMMENT '规格/尺码，如：L、XL、42码',
-    `model` VARCHAR(100) DEFAULT NULL COMMENT '型号',
-    `unit` VARCHAR(20) NOT NULL DEFAULT '个' COMMENT '计量单位：个/双/件/副/套等',
-    `stock_quantity` INT NOT NULL DEFAULT 0 COMMENT '当前库存数量',
-    `safety_stock` INT NOT NULL DEFAULT 10 COMMENT '安全库存阈值，低于此值触发预警',
-    `location` VARCHAR(100) DEFAULT NULL COMMENT '库位信息，如：A区-01架-02层',
-    `production_date` DATE DEFAULT NULL COMMENT '生产日期',
-    `expiry_date` DATE DEFAULT NULL COMMENT '有效期/过期日期',
-    `shelf_life_months` INT DEFAULT NULL COMMENT '保质期（月）',
-    `la_cert_no` VARCHAR(100) DEFAULT NULL COMMENT 'LA认证编号（特种劳动防护用品安全标志）',
-    `la_cert_image` VARCHAR(500) DEFAULT NULL COMMENT 'LA标志图片URL',
-    `la_cert_expiry` DATE DEFAULT NULL COMMENT 'LA证书有效期',
-    `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：0-停用, 1-启用',
-    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (`id`),
-    KEY `idx_name` (`name`),
-    KEY `idx_brand` (`brand`),
-    KEY `idx_expiry_date` (`expiry_date`),
-    KEY `idx_la_cert_no` (`la_cert_no`),
-    KEY `idx_stock_quantity` (`stock_quantity`),
-    KEY `idx_location` (`location`),
-    KEY `idx_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='PPE物品表 - 存储劳保用品基础信息和库存';
+-- =============================================================================
+-- 系统配置模块
+-- =============================================================================
 
--- =====================================================
--- 3. 入库记录表 (inbound_records)
--- 存储PPE物品入库的主记录信息
--- =====================================================
-DROP TABLE IF EXISTS `inbound_records`;
-CREATE TABLE `inbound_records` (
-    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '入库记录ID，主键自增',
-    `operator_id` INT UNSIGNED NOT NULL COMMENT '操作员ID，关联users表',
-    `source_type` ENUM('ocr', 'scan', 'manual') NOT NULL DEFAULT 'manual' COMMENT '入库方式：ocr-OCR识别, scan-扫码, manual-手动录入',
-    `total_items` INT NOT NULL DEFAULT 0 COMMENT '本次入库的物品种类数',
-    `total_quantity` INT NOT NULL DEFAULT 0 COMMENT '本次入库的总数量',
-    `notes` TEXT DEFAULT NULL COMMENT '备注信息',
-    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    PRIMARY KEY (`id`),
-    KEY `idx_operator_id` (`operator_id`),
-    KEY `idx_source_type` (`source_type`),
-    KEY `idx_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='入库记录表 - 存储PPE物品入库主记录';
+-- 数据字典表 (sys_dicts)
+CREATE TABLE IF NOT EXISTS sys_dicts (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tenant_id BIGINT UNSIGNED DEFAULT 0 COMMENT '租户ID: 0表示系统级',
+    dict_type VARCHAR(50) NOT NULL COMMENT '字典类型',
+    dict_code VARCHAR(50) NOT NULL COMMENT '字典编码',
+    dict_name VARCHAR(100) NOT NULL COMMENT '字典名称',
+    parent_id BIGINT UNSIGNED DEFAULT 0 COMMENT '上级ID',
+    sort_order INT DEFAULT 0 COMMENT '排序权重',
+    status TINYINT DEFAULT 1 COMMENT '状态: 0禁用 1启用',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    UNIQUE KEY uk_dict (tenant_id, dict_type, dict_code),
+    INDEX idx_type (dict_type, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- =====================================================
--- 4. 入库明细表 (inbound_items)
--- 存储每次入库的具体物品明细
--- =====================================================
-DROP TABLE IF EXISTS `inbound_items`;
-CREATE TABLE `inbound_items` (
-    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '入库明细ID，主键自增',
-    `inbound_id` INT UNSIGNED NOT NULL COMMENT '入库记录ID，关联inbound_records表',
-    `ppe_item_id` INT UNSIGNED NOT NULL COMMENT 'PPE物品ID，关联ppe_items表',
-    `quantity` INT NOT NULL DEFAULT 0 COMMENT '入库数量',
-    `production_date` DATE DEFAULT NULL COMMENT '生产日期（本次入库批次）',
-    `expiry_date` DATE DEFAULT NULL COMMENT '有效期（本次入库批次）',
-    `la_cert_no` VARCHAR(100) DEFAULT NULL COMMENT 'LA认证编号（本次入库批次）',
-    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    PRIMARY KEY (`id`),
-    KEY `idx_inbound_id` (`inbound_id`),
-    KEY `idx_ppe_item_id` (`ppe_item_id`),
-    KEY `idx_expiry_date` (`expiry_date`),
-    KEY `idx_created_at` (`created_at`),
-    -- 外键约束
-    CONSTRAINT `fk_inbound_items_inbound` FOREIGN KEY (`inbound_id`) REFERENCES `inbound_records` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT `fk_inbound_items_ppe` FOREIGN KEY (`ppe_item_id`) REFERENCES `ppe_items` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='入库明细表 - 存储入库物品详细信息';
+-- =============================================================================
+-- 库存管理模块
+-- =============================================================================
 
--- =====================================================
--- 5. 领取记录表 (outbound_records)
--- 存储PPE物品领取/出库的主记录信息
--- =====================================================
-DROP TABLE IF EXISTS `outbound_records`;
-CREATE TABLE `outbound_records` (
-    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '出库记录ID，主键自增',
-    `employee_id` INT UNSIGNED NOT NULL COMMENT '领取员工ID，关联users表',
-    `operator_id` INT UNSIGNED NOT NULL COMMENT '操作员ID，关联users表',
-    `source_type` ENUM('voice', 'manual') NOT NULL DEFAULT 'manual' COMMENT '领取方式：voice-语音, manual-手动',
-    `total_items` INT NOT NULL DEFAULT 0 COMMENT '本次领取的物品种类数',
-    `total_quantity` INT NOT NULL DEFAULT 0 COMMENT '本次领取的总数量',
-    `notes` TEXT DEFAULT NULL COMMENT '备注信息',
-    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    PRIMARY KEY (`id`),
-    KEY `idx_employee_id` (`employee_id`),
-    KEY `idx_operator_id` (`operator_id`),
-    KEY `idx_source_type` (`source_type`),
-    KEY `idx_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='领取记录表 - 存储PPE物品领取主记录';
+-- 仓库表 (inv_warehouses)
+CREATE TABLE IF NOT EXISTS inv_warehouses (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tenant_id BIGINT UNSIGNED NOT NULL COMMENT '租户ID',
+    code VARCHAR(50) COMMENT '仓库代码',
+    name VARCHAR(100) NOT NULL COMMENT '仓库名称',
+    type VARCHAR(20) DEFAULT 'room' COMMENT '类型: room/cabinet/shelf',
+    location VARCHAR(200) COMMENT '位置描述',
+    building VARCHAR(50) COMMENT '楼栋',
+    floor VARCHAR(20) COMMENT '楼层',
+    room_no VARCHAR(50) COMMENT '房间号',
+    manager_name VARCHAR(50) COMMENT '负责人姓名',
+    manager_phone VARCHAR(20) COMMENT '负责人电话',
+    qr_code VARCHAR(500) COMMENT '仓库二维码',
+    status TINYINT DEFAULT 1 COMMENT '状态: 0禁用 1启用',
+    
+    -- 预留字段（10个）
+    ext_1 VARCHAR(100) COMMENT '扩展字段1',
+    ext_2 VARCHAR(100) COMMENT '扩展字段2',
+    ext_3 VARCHAR(100) COMMENT '扩展字段3',
+    ext_4 VARCHAR(100) COMMENT '扩展字段4',
+    ext_5 VARCHAR(100) COMMENT '扩展字段5',
+    ext_6 VARCHAR(100) COMMENT '扩展字段6',
+    ext_7 VARCHAR(100) COMMENT '扩展字段7',
+    ext_8 VARCHAR(100) COMMENT '扩展字段8',
+    ext_9 VARCHAR(100) COMMENT '扩展字段9',
+    ext_10 TEXT COMMENT '扩展字段10',
+    
+    -- 审计字段
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- =====================================================
--- 6. 出库明细表 (outbound_items)
--- 存储每次领取/出库的具体物品明细
--- =====================================================
-DROP TABLE IF EXISTS `outbound_items`;
-CREATE TABLE `outbound_items` (
-    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '出库明细ID，主键自增',
-    `outbound_id` INT UNSIGNED NOT NULL COMMENT '出库记录ID，关联outbound_records表',
-    `ppe_item_id` INT UNSIGNED NOT NULL COMMENT 'PPE物品ID，关联ppe_items表',
-    `quantity` INT NOT NULL DEFAULT 0 COMMENT '领取数量',
-    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    PRIMARY KEY (`id`),
-    KEY `idx_outbound_id` (`outbound_id`),
-    KEY `idx_ppe_item_id` (`ppe_item_id`),
-    KEY `idx_created_at` (`created_at`),
-    -- 外键约束
-    CONSTRAINT `fk_outbound_items_outbound` FOREIGN KEY (`outbound_id`) REFERENCES `outbound_records` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT `fk_outbound_items_ppe` FOREIGN KEY (`ppe_item_id`) REFERENCES `ppe_items` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='出库明细表 - 存储领取物品详细信息';
+-- 劳保用品表 (inv_items)
+CREATE TABLE IF NOT EXISTS inv_items (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tenant_id BIGINT UNSIGNED NOT NULL COMMENT '租户ID',
+    warehouse_id BIGINT UNSIGNED COMMENT '仓库ID',
+    category_code VARCHAR(50) COMMENT '分类编码',
+    code VARCHAR(50) COMMENT '物品编码',
+    name VARCHAR(100) NOT NULL COMMENT '物品名称',
+    specification VARCHAR(200) COMMENT '规格型号',
+    brand VARCHAR(50) COMMENT '品牌',
+    model VARCHAR(50) COMMENT '型号',
+    unit VARCHAR(20) COMMENT '单位',
+    
+    -- 库存管理
+    quantity INT DEFAULT 0 COMMENT '当前库存',
+    safety_stock INT DEFAULT 0 COMMENT '安全库存',
+    max_stock INT DEFAULT 0 COMMENT '最大库存',
+    
+    -- 预警设置
+    alert_enabled TINYINT DEFAULT 1 COMMENT '预警启用: 0禁用 1启用',
+    alert_threshold INT DEFAULT 0 COMMENT '预警阈值',
+    
+    -- 员工领用限制
+    employee_limit_enabled TINYINT DEFAULT 0 COMMENT '员工限制启用: 0禁用 1启用',
+    employee_limit_qty INT DEFAULT 0 COMMENT '员工限制数量',
+    employee_limit_period VARCHAR(20) COMMENT '限制周期: month/quarter/year',
+    
+    -- 图片
+    image_url VARCHAR(500) COMMENT '图片URL',
+    
+    -- 状态
+    status TINYINT DEFAULT 1 COMMENT '状态: 0停用 1启用',
+    remark TEXT COMMENT '备注',
+    
+    -- 预留字段（10个）
+    ext_1 VARCHAR(100) COMMENT '扩展字段1',
+    ext_2 VARCHAR(100) COMMENT '扩展字段2',
+    ext_3 VARCHAR(100) COMMENT '扩展字段3',
+    ext_4 VARCHAR(100) COMMENT '扩展字段4',
+    ext_5 VARCHAR(100) COMMENT '扩展字段5',
+    ext_6 VARCHAR(100) COMMENT '扩展字段6',
+    ext_7 VARCHAR(100) COMMENT '扩展字段7',
+    ext_8 VARCHAR(100) COMMENT '扩展字段8',
+    ext_9 VARCHAR(100) COMMENT '扩展字段9',
+    ext_10 TEXT COMMENT '扩展字段10',
+    
+    -- 审计字段
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- =====================================================
--- 添加外键约束（inbound_records和outbound_records的外键）
--- 需要在users表创建后添加
--- =====================================================
+-- 库存流水表 (inv_transactions)
+CREATE TABLE IF NOT EXISTS inv_transactions (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tenant_id BIGINT UNSIGNED NOT NULL COMMENT '租户ID',
+    warehouse_id BIGINT UNSIGNED COMMENT '仓库ID',
+    item_id BIGINT UNSIGNED NOT NULL COMMENT '物品ID',
+    
+    -- 交易类型
+    type VARCHAR(20) COMMENT '类型: inbound/outbound/adjust',
+    subtype VARCHAR(50) COMMENT '子类型',
+    
+    -- 数量
+    quantity INT NOT NULL COMMENT '变动数量',
+    before_qty INT COMMENT '变动前数量',
+    after_qty INT COMMENT '变动后数量',
+    
+    -- 关联单据
+    source_id BIGINT UNSIGNED COMMENT '来源ID',
+    source_no VARCHAR(100) COMMENT '来源单号',
+    
+    -- 操作信息
+    operator_id BIGINT UNSIGNED COMMENT '操作人ID',
+    operator_name VARCHAR(50) COMMENT '操作人姓名',
+    operated_at TIMESTAMP COMMENT '操作时间',
+    
+    -- 备注
+    remark TEXT COMMENT '备注',
+    attachments JSON COMMENT '附件',
+    
+    -- 预留字段（10个）
+    ext_1 VARCHAR(100) COMMENT '扩展字段1',
+    ext_2 VARCHAR(100) COMMENT '扩展字段2',
+    ext_3 VARCHAR(100) COMMENT '扩展字段3',
+    ext_4 VARCHAR(100) COMMENT '扩展字段4',
+    ext_5 VARCHAR(100) COMMENT '扩展字段5',
+    ext_6 VARCHAR(100) COMMENT '扩展字段6',
+    ext_7 VARCHAR(100) COMMENT '扩展字段7',
+    ext_8 VARCHAR(100) COMMENT '扩展字段8',
+    ext_9 VARCHAR(100) COMMENT '扩展字段9',
+    ext_10 TEXT COMMENT '扩展字段10',
+    
+    -- 时间戳
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 入库记录表外键
-ALTER TABLE `inbound_records`
-    ADD CONSTRAINT `fk_inbound_operator` FOREIGN KEY (`operator_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+-- 入库记录表 (inv_inbound)
+CREATE TABLE IF NOT EXISTS inv_inbound (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tenant_id BIGINT UNSIGNED NOT NULL COMMENT '租户ID',
+    warehouse_id BIGINT UNSIGNED COMMENT '仓库ID',
+    transaction_id BIGINT UNSIGNED COMMENT '交易ID',
+    item_id BIGINT UNSIGNED COMMENT '物品ID',
+    quantity INT COMMENT '入库数量',
+    
+    -- 入库方式
+    source_type VARCHAR(20) COMMENT '来源类型: ocr/manual',
+    
+    -- OCR相关
+    ocr_image_url VARCHAR(500) COMMENT 'OCR图片URL',
+    ocr_raw_text TEXT COMMENT 'OCR原始文本',
+    ocr_confidence DECIMAL(5,2) COMMENT 'OCR置信度',
+    
+    -- 操作人
+    operator_id BIGINT UNSIGNED COMMENT '操作人ID',
+    operator_name VARCHAR(50) COMMENT '操作人姓名',
+    inbound_date DATE COMMENT '入库日期',
+    
+    -- 备注
+    remark TEXT COMMENT '备注',
+    
+    -- 预留字段（10个）
+    ext_1 VARCHAR(100) COMMENT '扩展字段1',
+    ext_2 VARCHAR(100) COMMENT '扩展字段2',
+    ext_3 VARCHAR(100) COMMENT '扩展字段3',
+    ext_4 VARCHAR(100) COMMENT '扩展字段4',
+    ext_5 VARCHAR(100) COMMENT '扩展字段5',
+    ext_6 VARCHAR(100) COMMENT '扩展字段6',
+    ext_7 VARCHAR(100) COMMENT '扩展字段7',
+    ext_8 VARCHAR(100) COMMENT '扩展字段8',
+    ext_9 VARCHAR(100) COMMENT '扩展字段9',
+    ext_10 TEXT COMMENT '扩展字段10',
+    
+    -- 时间戳
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 领取记录表外键
-ALTER TABLE `outbound_records`
-    ADD CONSTRAINT `fk_outbound_employee` FOREIGN KEY (`employee_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
-    ADD CONSTRAINT `fk_outbound_operator` FOREIGN KEY (`operator_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+-- 出库记录表 (inv_outbound)
+CREATE TABLE IF NOT EXISTS inv_outbound (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tenant_id BIGINT UNSIGNED NOT NULL COMMENT '租户ID',
+    warehouse_id BIGINT UNSIGNED COMMENT '仓库ID',
+    transaction_id BIGINT UNSIGNED COMMENT '交易ID',
+    item_id BIGINT UNSIGNED COMMENT '物品ID',
+    quantity INT COMMENT '出库数量',
+    
+    -- 领用人信息
+    employee_id BIGINT UNSIGNED COMMENT '员工ID',
+    employee_name VARCHAR(50) COMMENT '员工姓名',
+    employee_phone VARCHAR(20) COMMENT '员工手机号',
+    employee_department VARCHAR(50) COMMENT '员工部门',
+    
+    -- 领用方式
+    source_type VARCHAR(20) COMMENT '来源类型: scan/web/manual',
+    qr_code VARCHAR(500) COMMENT '二维码',
+    
+    -- 用途
+    purpose VARCHAR(200) COMMENT '用途',
+    work_area VARCHAR(100) COMMENT '工作区域',
+    
+    -- 审批（预留）
+    approval_status TINYINT DEFAULT 1 COMMENT '审批状态: 0待审 1通过 2拒绝',
+    
+    -- 操作人
+    operator_id BIGINT UNSIGNED COMMENT '操作人ID',
+    operator_name VARCHAR(50) COMMENT '操作人姓名',
+    outbound_date DATE COMMENT '出库日期',
+    
+    -- 备注
+    remark TEXT COMMENT '备注',
+    
+    -- 预留字段（10个）
+    ext_1 VARCHAR(100) COMMENT '扩展字段1',
+    ext_2 VARCHAR(100) COMMENT '扩展字段2',
+    ext_3 VARCHAR(100) COMMENT '扩展字段3',
+    ext_4 VARCHAR(100) COMMENT '扩展字段4',
+    ext_5 VARCHAR(100) COMMENT '扩展字段5',
+    ext_6 VARCHAR(100) COMMENT '扩展字段6',
+    ext_7 VARCHAR(100) COMMENT '扩展字段7',
+    ext_8 VARCHAR(100) COMMENT '扩展字段8',
+    ext_9 VARCHAR(100) COMMENT '扩展字段9',
+    ext_10 TEXT COMMENT '扩展字段10',
+    
+    -- 时间戳
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- =====================================================
--- 创建触发器：自动更新ppe_items库存数量
--- =====================================================
+-- =============================================================================
+-- 索引优化
+-- =============================================================================
 
-DELIMITER //
+-- 租户表索引
+CREATE UNIQUE INDEX uk_tenants_code ON core_tenants(code);
+CREATE INDEX idx_tenants_status ON core_tenants(status);
 
--- 入库触发器：增加库存
-CREATE TRIGGER `trg_after_inbound_insert`
-AFTER INSERT ON `inbound_items`
-FOR EACH ROW
-BEGIN
-    UPDATE `ppe_items`
-    SET `stock_quantity` = `stock_quantity` + NEW.quantity,
-        `updated_at` = NOW()
-    WHERE `id` = NEW.ppe_item_id;
-END//
+-- 用户表索引
+CREATE UNIQUE INDEX uk_users_tenant_phone ON core_users(tenant_id, phone);
+CREATE INDEX idx_users_employee_no ON core_users(tenant_id, employee_no);
+CREATE INDEX idx_users_department ON core_users(tenant_id, department);
 
--- 出库触发器：减少库存
-CREATE TRIGGER `trg_after_outbound_insert`
-AFTER INSERT ON `outbound_items`
-FOR EACH ROW
-BEGIN
-    UPDATE `ppe_items`
-    SET `stock_quantity` = `stock_quantity` - NEW.quantity,
-        `updated_at` = NOW()
-    WHERE `id` = NEW.ppe_item_id;
-END//
+-- 仓库表索引
+CREATE INDEX idx_warehouses_tenant ON inv_warehouses(tenant_id, status);
 
-DELIMITER ;
+-- 劳保用品表索引
+CREATE INDEX idx_items_tenant_warehouse ON inv_items(tenant_id, warehouse_id, status);
+CREATE INDEX idx_items_category ON inv_items(tenant_id, category_code);
+CREATE INDEX idx_items_code ON inv_items(tenant_id, code);
 
--- =====================================================
--- 创建视图：库存预警视图
--- =====================================================
-CREATE OR REPLACE VIEW `v_stock_alert` AS
+-- 库存流水表索引
+CREATE INDEX idx_transactions_item_time ON inv_transactions(tenant_id, item_id, created_at DESC);
+CREATE INDEX idx_transactions_type_time ON inv_transactions(tenant_id, type, created_at DESC);
+CREATE INDEX idx_transactions_warehouse ON inv_transactions(tenant_id, warehouse_id, created_at DESC);
+
+-- 入库记录表索引
+CREATE INDEX idx_inbound_tenant_warehouse ON inv_inbound(tenant_id, warehouse_id, inbound_date DESC);
+CREATE INDEX idx_inbound_operator ON inv_inbound(tenant_id, operator_id, inbound_date DESC);
+
+-- 出库记录表索引
+CREATE INDEX idx_outbound_employee ON inv_outbound(tenant_id, employee_phone, outbound_date DESC);
+CREATE INDEX idx_outbound_warehouse ON inv_outbound(tenant_id, warehouse_id, outbound_date DESC);
+CREATE INDEX idx_outbound_item ON inv_outbound(tenant_id, item_id, outbound_date DESC);
+
+-- =============================================================================
+-- 视图定义
+-- =============================================================================
+
+-- 库存实时视图
+CREATE OR REPLACE VIEW vw_inventory_current AS
 SELECT 
-    `id`,
-    `name`,
-    `brand`,
-    `size`,
-    `stock_quantity`,
-    `safety_stock`,
-    (`stock_quantity` - `safety_stock`) AS `stock_diff`,
-    `location`,
+    i.id AS item_id,
+    i.tenant_id,
+    i.code AS item_code,
+    i.name AS item_name,
+    i.category_code,
+    d.dict_name AS category_name,
+    i.specification,
+    i.unit,
+    w.id AS warehouse_id,
+    w.code AS warehouse_code,
+    w.name AS warehouse_name,
+    COALESCE(SUM(CASE 
+        WHEN t.type = 'inbound' THEN t.quantity 
+        WHEN t.type = 'outbound' THEN -t.quantity 
+        ELSE 0 
+    END), 0) AS current_qty,
+    i.safety_stock,
+    i.max_stock,
     CASE 
-        WHEN `stock_quantity` = 0 THEN '缺货'
-        WHEN `stock_quantity` < `safety_stock` THEN '库存不足'
-        ELSE '正常'
-    END AS `alert_level`
-FROM `ppe_items`
-WHERE `stock_quantity` < `safety_stock`
-ORDER BY `stock_quantity` ASC;
+        WHEN COALESCE(SUM(CASE 
+            WHEN t.type = 'inbound' THEN t.quantity 
+            WHEN t.type = 'outbound' THEN -t.quantity 
+            ELSE 0 
+        END), 0) <= i.safety_stock THEN 'low'
+        ELSE 'normal'
+    END AS stock_status,
+    i.status AS item_status
+FROM inv_items i
+LEFT JOIN inv_warehouses w ON i.warehouse_id = w.id
+LEFT JOIN sys_dicts d ON i.category_code = d.dict_code 
+    AND d.dict_type = 'item_category' 
+    AND d.tenant_id = i.tenant_id
+LEFT JOIN inv_transactions t ON i.id = t.item_id AND t.deleted_at IS NULL
+WHERE i.deleted_at IS NULL
+GROUP BY i.id, w.id;
 
--- =====================================================
--- 创建视图：即将过期物品视图
--- =====================================================
-CREATE OR REPLACE VIEW `v_expiry_alert` AS
+-- 员工领用统计视图
+CREATE OR REPLACE VIEW vw_employee_usage AS
 SELECT 
-    `id`,
-    `name`,
-    `brand`,
-    `expiry_date`,
-    `stock_quantity`,
-    DATEDIFF(`expiry_date`, CURDATE()) AS `days_until_expiry`,
-    CASE 
-        WHEN `expiry_date` < CURDATE() THEN '已过期'
-        WHEN DATEDIFF(`expiry_date`, CURDATE()) <= 30 THEN '即将过期'
-        ELSE '正常'
-    END AS `expiry_status`
-FROM `ppe_items`
-WHERE `expiry_date` IS NOT NULL
-  AND (`expiry_date` < DATE_ADD(CURDATE(), INTERVAL 30 DAY) OR `expiry_date` < CURDATE())
-ORDER BY `expiry_date` ASC;
+    o.tenant_id,
+    o.employee_id,
+    o.employee_name,
+    o.employee_phone,
+    o.employee_department,
+    i.id AS item_id,
+    i.name AS item_name,
+    d.dict_name AS category_name,
+    i.unit,
+    SUM(o.quantity) AS total_qty,
+    COUNT(*) AS total_times,
+    MIN(o.outbound_date) AS first_date,
+    MAX(o.outbound_date) AS last_date
+FROM inv_outbound o
+JOIN inv_items i ON o.item_id = i.id
+LEFT JOIN sys_dicts d ON i.category_code = d.dict_code AND d.dict_type = 'item_category'
+WHERE o.deleted_at IS NULL
+GROUP BY o.tenant_id, o.employee_id, i.id;
 
--- =====================================================
--- 示例数据插入
--- =====================================================
+-- =============================================================================
+-- 初始数据
+-- =============================================================================
 
--- 1. 插入用户数据
-INSERT INTO `users` (`name`, `phone`, `department`, `role`, `status`) VALUES
-('系统管理员', '13800138000', '信息技术部', 'admin', 1),
-('张经理', '13800138001', '安全管理部', 'boss', 1),
-('李安全员', '13800138002', '安全管理部', 'admin', 1),
-('王工人', '13800138003', '生产一部', 'employee', 1),
-('赵工人', '13800138004', '生产一部', 'employee', 1),
-('刘工人', '13800138005', '生产二部', 'employee', 1),
-('陈工人', '13800138006', '生产二部', 'employee', 1),
-('杨质检', '13800138007', '质量检验部', 'employee', 1);
+-- 数据字典初始化
+INSERT IGNORE INTO sys_dicts (dict_type, dict_code, dict_name, sort_order) VALUES
+-- 物品分类
+('item_category', 'head', '头部防护', 1),
+('item_category', 'eye', '眼部防护', 2),
+('item_category', 'hand', '手部防护', 3),
+('item_category', 'foot', '足部防护', 4),
+('item_category', 'body', '身体防护', 5),
+('item_category', 'resp', '呼吸防护', 6),
 
--- 2. 插入PPE物品数据
-INSERT INTO `ppe_items` (`name`, `brand`, `size`, `model`, `unit`, `stock_quantity`, `safety_stock`, `location`, `production_date`, `expiry_date`, `shelf_life_months`, `la_cert_no`, `la_cert_expiry`) VALUES
-('安全帽', '3M', '均码', 'H-700', '个', 50, 20, 'A区-01架-01层', '2024-01-15', '2027-01-14', 36, 'LA-2024-001', '2026-12-31'),
-('防护手套', '霍尼韦尔', 'L', '2094141', '双', 100, 30, 'A区-01架-02层', '2024-02-01', '2026-02-01', 24, 'LA-2024-002', '2025-12-31'),
-('防护手套', '霍尼韦尔', 'XL', '2094141', '双', 80, 30, 'A区-01架-02层', '2024-02-01', '2026-02-01', 24, 'LA-2024-002', '2025-12-31'),
-('防尘口罩', '3M', '均码', '9501V', '个', 200, 50, 'A区-02架-01层', '2024-03-01', '2027-03-01', 36, 'LA-2024-003', '2026-12-31'),
-('防护眼镜', '代尔塔', '均码', '101104', '副', 60, 20, 'A区-02架-02层', '2024-01-20', '2026-01-20', 24, 'LA-2024-004', '2025-12-31'),
-('安全鞋', '赛固', '42', 'SG-801', '双', 40, 15, 'B区-01架-01层', '2024-01-10', '2027-01-10', 36, 'LA-2024-005', '2026-12-31'),
-('安全鞋', '赛固', '43', 'SG-801', '双', 35, 15, 'B区-01架-01层', '2024-01-10', '2027-01-10', 36, 'LA-2024-005', '2026-12-31'),
-('防护服', '杜邦', 'L', 'Tyvek-400', '件', 25, 10, 'B区-02架-01层', '2024-02-15', '2029-02-15', 60, 'LA-2024-006', '2028-12-31'),
-('耳塞', '3M', '均码', '1250', '副', 500, 100, 'A区-03架-01层', '2024-03-10', '2026-03-10', 24, 'LA-2024-007', '2025-12-31'),
-('防护面罩', '3M', '均码', '6800', '个', 15, 5, 'A区-02架-03层', '2024-01-05', '2027-01-05', 36, 'LA-2024-008', '2026-12-31');
+-- 仓库类型
+('warehouse_type', 'room', '仓库房间', 1),
+('warehouse_type', 'cabinet', '智能柜', 2),
+('warehouse_type', 'shelf', '货架区', 3),
 
--- 3. 插入入库记录
-INSERT INTO `inbound_records` (`operator_id`, `source_type`, `total_items`, `total_quantity`, `notes`) VALUES
-(1, 'manual', 3, 150, '2024年3月首批采购入库'),
-(2, 'scan', 2, 80, '扫码快速入库'),
-(3, 'ocr', 4, 200, 'OCR识别入库');
+-- 用户角色
+('user_role', 'admin', '管理员', 1),
+('user_role', 'operator', '操作员', 2),
+('user_role', 'viewer', '查看员', 3),
 
--- 4. 插入入库明细
-INSERT INTO `inbound_items` (`inbound_id`, `ppe_item_id`, `quantity`, `production_date`, `expiry_date`, `la_cert_no`) VALUES
-(1, 1, 50, '2024-01-15', '2027-01-14', 'LA-2024-001'),
-(1, 2, 60, '2024-02-01', '2026-02-01', 'LA-2024-002'),
-(1, 4, 40, '2024-03-01', '2027-03-01', 'LA-2024-003'),
-(2, 3, 40, '2024-02-01', '2026-02-01', 'LA-2024-002'),
-(2, 5, 40, '2024-01-20', '2026-01-20', 'LA-2024-004'),
-(3, 6, 20, '2024-01-10', '2027-01-10', 'LA-2024-005'),
-(3, 7, 20, '2024-01-10', '2027-01-10', 'LA-2024-005'),
-(3, 8, 15, '2024-02-15', '2029-02-15', 'LA-2024-006'),
-(3, 9, 100, '2024-03-10', '2026-03-10', 'LA-2024-007');
+-- 入库方式
+('inbound_type', 'ocr', '截图识别', 1),
+('inbound_type', 'manual', '手工录入', 2),
 
--- 5. 插入领取记录
-INSERT INTO `outbound_records` (`employee_id`, `operator_id`, `source_type`, `total_items`, `total_quantity`, `notes`) VALUES
-(4, 2, 'manual', 2, 3, '新员工入职领取'),
-(5, 2, 'voice', 1, 2, '语音领取'),
-(6, 3, 'manual', 3, 5, '季度更换'),
-(7, 3, 'manual', 2, 4, '正常领取');
+-- 出库方式
+('outbound_type', 'scan', '扫码领用', 1),
+('outbound_type', 'web', '网页领用', 2);
 
--- 6. 插入出库明细
-INSERT INTO `outbound_items` (`outbound_id`, `ppe_item_id`, `quantity`) VALUES
-(1, 1, 1),
-(1, 2, 2),
-(2, 4, 2),
-(3, 1, 1),
-(3, 2, 2),
-(3, 6, 2),
-(4, 3, 2),
-(4, 5, 2);
+-- =============================================================================
+-- 权限检查（可选）
+-- =============================================================================
 
--- 恢复外键检查
+-- 检查表是否创建成功
+SELECT 'Database schema created successfully!' AS message;
+
+-- 重置外键检查
 SET FOREIGN_KEY_CHECKS = 1;
-
--- =====================================================
--- Schema创建完成
--- =====================================================
-SELECT 'PPE智能管理系统数据库Schema创建成功！' AS `message`;

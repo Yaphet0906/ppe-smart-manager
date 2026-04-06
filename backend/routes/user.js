@@ -54,7 +54,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
         companyId: user.tenant_id,
         companyName: user.company_name
       },
-      SECRET_KEY,
+      process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
     
