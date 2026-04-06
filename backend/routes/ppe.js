@@ -2,23 +2,32 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
 const authMiddleware = require('../middleware/auth');
+const { validate, addItemSchema, inboundSchema, outboundSchema } = require('../middleware/validate');
 
-// 获取用品列表（支持按仓库筛选，支持分组显示）
+// 获取用品列表（支持按仓库筛选，支持分组显示，支持分页）
 router.get('/list', authMiddleware, async (req, res) => {
   try {
-    const { warehouse_id, group_by_name } = req.query;
+    const { warehouse_id, group_by_name, page = 1, limit = 100 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
     
-    let query = 'SELECT id, name, warehouse_id, brand, model, size, category_code as category, specification, unit, quantity as stock, quantity as quantity, safety_stock as min_stock, status FROM inv_items WHERE tenant_id = ? AND deleted_at IS NULL';
+    // 基础查询
+    let baseQuery = 'FROM inv_items WHERE tenant_id = ? AND deleted_at IS NULL';
     let params = [req.companyId];
     
     // 如果指定了仓库，按仓库筛选
     if (warehouse_id && warehouse_id !== 'null' && warehouse_id !== '' && warehouse_id !== 'undefined') {
       const warehouseIdInt = parseInt(warehouse_id);
-      query += ' AND warehouse_id = ?';
+      baseQuery += ' AND warehouse_id = ?';
       params.push(warehouseIdInt);
     }
     
-    query += ' ORDER BY name, size';
+    // 获取总数
+    const [countResult] = await pool.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
+    const total = countResult[0].total;
+    
+    // 获取分页数据
+    let query = `SELECT id, name, warehouse_id, brand, model, size, category_code as category, specification, unit, quantity as stock, quantity as quantity, safety_stock as min_stock, status ${baseQuery} ORDER BY name, size LIMIT ? OFFSET ?`;
+    params.push(parseInt(limit), offset);
     
     const [rows] = await pool.query(query, params);
     
@@ -41,7 +50,16 @@ router.get('/list', authMiddleware, async (req, res) => {
           displayName: `${row.name} - ${row.size || '均码'}`
         });
       });
-      res.json({ code: 200, data: Object.values(grouped) });
+      res.json({ 
+        code: 200, 
+        data: Object.values(grouped),
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          totalPages: Math.ceil(total / parseInt(limit))
+        }
+      });
     } else {
       // 扁平列表
       const formattedRows = rows.map(row => ({
@@ -49,16 +67,25 @@ router.get('/list', authMiddleware, async (req, res) => {
         type: row.category || '-',
         displayName: `${row.name}${row.size ? ' - ' + row.size : ''}`
       }));
-      res.json({ code: 200, data: formattedRows });
+      res.json({ 
+        code: 200, 
+        data: formattedRows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          totalPages: Math.ceil(total / parseInt(limit))
+        }
+      });
     }
   } catch (error) {
     console.error('获取用品列表错误:', error);
-    res.json({ code: 500, msg: '服务器错误: ' + error.message });
+    res.status(500).json({ code: 500, msg: '服务器错误' });
   }
 });
 
 // 添加用品（使用新表 inv_items，支持尺码，同时记录入库历史）
-router.post('/add', authMiddleware, async (req, res) => {
+router.post('/add', authMiddleware, validate(addItemSchema), async (req, res) => {
   const { name, category, specification, unit, quantity, safety_stock, brand, model, size, warehouse_id, type } = req.body;
   const categoryCode = category || type || 'other';
   const itemQuantity = quantity || 0;
@@ -169,7 +196,7 @@ router.delete('/delete/:id', authMiddleware, async (req, res) => {
 });
 
 // 入库（使用新表 inv_inbound 和 inv_items）
-router.post('/inbound', authMiddleware, async (req, res) => {
+router.post('/inbound', authMiddleware, validate(inboundSchema), async (req, res) => {
   try {
     const { item_id, quantity, supplier, remarks, brand, model, warehouse_id } = req.body;
     const connection = await pool.getConnection();
@@ -228,7 +255,7 @@ router.post('/inbound', authMiddleware, async (req, res) => {
 });
 
 // 出库（使用新表 inv_outbound 和 inv_items）
-router.post('/outbound', authMiddleware, async (req, res) => {
+router.post('/outbound', authMiddleware, validate(outboundSchema), async (req, res) => {
   try {
     const { item_id, quantity, employee_name, employee_phone, purpose, warehouse_id } = req.body;
     const connection = await pool.getConnection();

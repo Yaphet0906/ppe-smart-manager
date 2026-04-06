@@ -45,7 +45,11 @@ WORKDIR /app
 
 # 复制后端依赖和代码
 COPY --from=backend-builder /app/backend/node_modules ./node_modules
-COPY --from=backend-builder /app/backend/src ./src
+COPY --from=backend-builder /app/backend/app.js ./
+COPY --from=backend-builder /app/backend/routes ./routes
+COPY --from=backend-builder /app/backend/config ./config
+COPY --from=backend-builder /app/backend/middleware ./middleware
+COPY --from=backend-builder /app/backend/database ./database
 COPY --from=backend-builder /app/backend/package.json ./
 
 # 复制前端构建产物
@@ -68,4 +72,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # 启动应用
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "src/index.js"]
+CMD ["node", "app.js"]

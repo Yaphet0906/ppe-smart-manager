@@ -3,14 +3,8 @@ const router = express.Router();
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-
-const SECRET_KEY = process.env.SECRET_KEY;
-
-// 检查必要的环境变量
-if (!SECRET_KEY) {
-  console.error('错误: SECRET_KEY 环境变量未设置');
-  process.exit(1);
-}
+const { validate, loginSchema, registerCompanySchema, changePasswordSchema } = require('../middleware/validate');
+const authMiddleware = require('../middleware/auth');
 
 // 生成随机公司代码（仅用于数据库内部，不对用户显示）
 const generateCompanyCode = () => {
@@ -18,7 +12,7 @@ const generateCompanyCode = () => {
 };
 
 // 用户登录（使用公司名称+手机号+密码）
-router.post('/login', async (req, res) => {
+router.post('/login', validate(loginSchema), async (req, res) => {
   try {
     const { companyName, phone, password } = req.body;
     
@@ -87,17 +81,14 @@ router.post('/login', async (req, res) => {
 });
 
 // 获取用户信息
-router.get('/info', async (req, res) => {
+router.get('/info', authMiddleware, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ code: 401, msg: '未登录' });
-    }
-    
-    const decoded = jwt.verify(token, SECRET_KEY);
     res.json({
       code: 200,
-      data: decoded
+      data: {
+        id: req.userId,
+        companyId: req.companyId
+      }
     });
   } catch (error) {
     res.status(401).json({ code: 401, msg: 'token无效' });
@@ -105,7 +96,7 @@ router.get('/info', async (req, res) => {
 });
 
 // 注册新公司（只需要公司名称，自动生成内部code）
-router.post('/register-company', async (req, res) => {
+router.post('/register-company', validate(registerCompanySchema), async (req, res) => {
   try {
     const { companyName, contactName, contactPhone, adminPassword } = req.body;
     
@@ -253,14 +244,8 @@ router.get('/public-ppe-list', async (req, res) => {
 });
 
 // 修改密码（首次登录或主动修改）
-router.post('/change-password', async (req, res) => {
+router.post('/change-password', authMiddleware, validate(changePasswordSchema), async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ code: 401, msg: '未登录' });
-    }
-
-    const decoded = jwt.verify(token, SECRET_KEY);
     const { oldPassword, newPassword } = req.body;
 
     if (!newPassword || newPassword.length < 6) {
@@ -270,7 +255,7 @@ router.post('/change-password', async (req, res) => {
     // 查询用户
     const [users] = await pool.query(
       'SELECT * FROM core_users WHERE id = ? AND tenant_id = ?',
-      [decoded.id, decoded.companyId]
+      [req.userId, req.companyId]
     );
 
     if (users.length === 0) {
@@ -302,22 +287,15 @@ router.post('/change-password', async (req, res) => {
 });
 
 // 获取当前登录用户信息
-router.get('/profile', async (req, res) => {
+router.get('/profile', authMiddleware, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ code: 401, msg: '未登录' });
-    }
-
-    const decoded = jwt.verify(token, SECRET_KEY);
-    
     const [users] = await pool.query(
       `SELECT u.id, u.name, u.phone, u.email, u.role, 
               t.id as company_id, t.name as company_name
        FROM core_users u
        LEFT JOIN core_tenants t ON u.tenant_id = t.id
        WHERE u.id = ?`,
-      [decoded.id]
+      [req.userId]
     );
     
     if (users.length === 0) {

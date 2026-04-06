@@ -41,12 +41,12 @@ services:
       DB_USER: ${DB_USER:-ppe_user}
       DB_PASSWORD: ${DB_PASSWORD:-ppe_password}
       DB_NAME: ${DB_NAME:-ppe_smart_manager}
-      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       XUNFEI_APP_ID: ${XUNFEI_APP_ID:-}
       XUNFEI_API_KEY: ${XUNFEI_API_KEY:-}
       XUNFEI_API_SECRET: ${XUNFEI_API_SECRET:-}
-      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      CORS_ORIGIN: ${CORS_ORIGIN}
     ports:
       - "3001:3001"
     healthcheck:

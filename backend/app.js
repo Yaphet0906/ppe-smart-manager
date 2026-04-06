@@ -4,6 +4,9 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const bodyParser = require('body-parser');
 const dotenv = require('dotenv');
+const swaggerJsdoc = require('swagger-jsdoc');
+const swaggerUi = require('swagger-ui-express');
+const logger = require('./config/logger');
 dotenv.config();
 
 const app = express();
@@ -51,13 +54,46 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// 5. 请求日志中间件（仅开发环境）
-if (process.env.NODE_ENV !== 'production') {
-  app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-    next();
+// 5. 请求日志中间件
+app.use((req, res, next) => {
+  logger.info(`${req.method} ${req.url}`, {
+    ip: req.ip,
+    userAgent: req.get('user-agent')
   });
-}
+  next();
+});
+
+// Swagger 文档配置
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'PPE Smart Manager API',
+      version: '1.5.0',
+      description: '劳保用品管理系统 API 文档',
+    },
+    servers: [
+      {
+        url: 'http://localhost:3001/api',
+        description: '开发服务器',
+      },
+    ],
+  },
+  apis: ['./routes/*.js'], // 路由文件路径
+};
+
+const specs = swaggerJsdoc(swaggerOptions);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+
+// 健康检查端点
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    version: '1.5.0',
+    uptime: process.uptime()
+  });
+});
 
 // 路由挂载
 app.use('/api/user', require('./routes/user'));
@@ -73,7 +109,12 @@ app.use((req, res) => {
 
 // 全局错误处理中间件
 app.use((err, req, res, next) => {
-  console.error('服务器错误:', err);
+  logger.error('服务器错误', {
+    error: err.message,
+    stack: err.stack,
+    url: req.url,
+    method: req.method
+  });
   
   // 生产环境不暴露详细错误
   const message = process.env.NODE_ENV === 'production' 
