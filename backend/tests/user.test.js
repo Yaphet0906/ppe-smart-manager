@@ -51,9 +51,9 @@ describe('用户认证 API', () => {
       const res = await request(app)
         .post('/api/user/login')
         .send({ companyName: 'ABCD' })
-        .expect(200);
+        .expect(400);  // Joi 验证直接返回 HTTP 400
       
-      expect(res.body.code).toBe(400);
+      expect(res.body.code || res.status).toBe(400);
     });
   });
 

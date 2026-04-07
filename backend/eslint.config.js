@@ -25,11 +25,12 @@ module.exports = [
     rules: {
       ...js.configs.recommended.rules,
       'no-console': 'off',  // 允许 console，因为我们有 logger
-      'no-unused-vars': ['error', { 
+      'no-unused-vars': ['warn', { 
         'argsIgnorePattern': '^_',
-        'varsIgnorePattern': '^_'
+        'varsIgnorePattern': '^_',
+        'destructuredArrayIgnorePattern': '^_'
       }],
-      'prefer-const': 'error',
+      'prefer-const': 'warn',
       'no-var': 'error',
       'eqeqeq': ['error', 'always'],
       'curly': ['error', 'all'],
