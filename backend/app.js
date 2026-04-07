@@ -107,25 +107,11 @@ app.use((req, res) => {
   });
 });
 
-// 全局错误处理中间件
-app.use((err, req, res, next) => {
-  logger.error('服务器错误', {
-    error: err.message,
-    stack: err.stack,
-    url: req.url,
-    method: req.method
-  });
-  
-  // 生产环境不暴露详细错误
-  const message = process.env.NODE_ENV === 'production' 
-    ? '服务器内部错误' 
-    : err.message;
-  
-  res.status(err.status || 500).json({
-    code: err.status || 500,
-    msg: message
-  });
-});
+// 导入统一错误处理中间件
+const { errorHandler } = require('./middleware/errorHandler');
+
+// 使用统一错误处理中间件
+app.use(errorHandler);
 
 // 启动服务器（仅在非测试环境）
 if (process.env.NODE_ENV !== 'test') {
