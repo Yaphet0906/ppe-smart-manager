@@ -4,31 +4,27 @@ const pool = require('../config/db');
 const logger = require('../config/logger');
 const authMiddleware = require('../middleware/auth');
 const { validate, addItemSchema, inboundSchema, outboundSchema } = require('../middleware/validate');
+const { ItemQueryBuilder } = require('../utils/queryBuilder');
 
 // 获取用品列表（支持按仓库筛选，支持分组显示，支持分页）
 router.get('/list', authMiddleware, async (req, res) => {
   try {
     const { warehouse_id, group_by_name, page = 1, limit = 100 } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
     
-    // 基础查询
-    let baseQuery = 'FROM inv_items WHERE tenant_id = ? AND deleted_at IS NULL';
-    let params = [req.companyId];
+    // 使用查询构建器构建安全查询
+    const queryBuilder = new ItemQueryBuilder(req.companyId)
+      .withWarehouse(warehouse_id)
+      .excludeDeleted()
+      .withPagination(page, limit);
     
-    // 如果指定了仓库，按仓库筛选
-    if (warehouse_id && warehouse_id !== 'null' && warehouse_id !== '' && warehouse_id !== 'undefined') {
-      const warehouseIdInt = parseInt(warehouse_id);
-      baseQuery += ' AND warehouse_id = ?';
-      params.push(warehouseIdInt);
-    }
+    const { sql: query, params, countSql, countParams } = queryBuilder
+      .select('id, name, warehouse_id, brand, model, size, category_code as category, specification, unit, quantity as stock, safety_stock as min_stock, status')
+      .orderByField('name', 'ASC')
+      .build();
     
     // 获取总数
-    const [countResult] = await pool.query(`SELECT COUNT(*) as total ${baseQuery}`, params);
+    const [countResult] = await pool.query(countSql, countParams);
     const total = countResult[0].total;
-    
-    // 获取分页数据
-    let query = `SELECT id, name, warehouse_id, brand, model, size, category_code as category, specification, unit, quantity as stock, quantity as quantity, safety_stock as min_stock, status ${baseQuery} ORDER BY name, size LIMIT ? OFFSET ?`;
-    params.push(parseInt(limit), offset);
     
     const [rows] = await pool.query(query, params);
     
