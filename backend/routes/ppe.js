@@ -11,13 +11,11 @@ router.get('/list', authMiddleware, async (req, res) => {
   try {
     const { warehouse_id, group_by_name, page = 1, limit = 100 } = req.query;
     
-    // 使用查询构建器构建安全查询
-    const queryBuilder = new ItemQueryBuilder(req.companyId)
+    // 使用查询构建器构建安全查询（方法链顺序：配置 -> build）
+    const { sql: query, params, countSql, countParams } = new ItemQueryBuilder(req.companyId)
       .withWarehouse(warehouse_id)
       .excludeDeleted()
-      .withPagination(page, limit);
-    
-    const { sql: query, params, countSql, countParams } = queryBuilder
+      .withPagination(page, limit)
       .select('id, name, warehouse_id, brand, model, size, category_code as category, specification, unit, quantity as stock, safety_stock as min_stock, status')
       .orderByField('name', 'ASC')
       .build();

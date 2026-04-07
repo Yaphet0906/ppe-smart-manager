@@ -66,6 +66,16 @@ class ItemQueryBuilder {
     return this;
   }
 
+  select(fields) {
+    this.selectFields = Array.isArray(fields) ? fields.join(', ') : fields;
+    return this;
+  }
+
+  orderByField(field, direction = 'DESC') {
+    this.orderBy = `${field} ${direction}`;
+    return this;
+  }
+
   build() {
     const whereClause = this.conditions.join(' AND ');
     let sql = `SELECT ${this.selectFields} FROM inv_items WHERE ${whereClause}`;
