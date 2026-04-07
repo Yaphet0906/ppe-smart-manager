@@ -107,14 +107,18 @@
 
 <script>
 import { reactive, ref, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import request from '../utils/request';
 
 export default {
   name: 'PPEList',
   setup() {
+    const route = useRoute();
+    const router = useRouter();
     const loading = ref(false);
     const tableData = ref([]);
+    const allTableData = ref([]); // 存储原始数据用于筛选
     const warehouseList = ref([]);
     // 从 localStorage 读取之前选择的仓库
     const savedWarehouseId = localStorage.getItem('currentWarehouseId');
@@ -122,6 +126,7 @@ export default {
     const showAddWarehouse = ref(false);
     const warehouseRef = ref(null);
     const isGroupView = ref(true); // 是否分组显示
+    const currentFilter = ref(route.query.filter || 'all'); // 当前筛选条件
 
     const warehouseForm = reactive({
       code: '',
@@ -172,6 +177,36 @@ export default {
       }
     };
 
+    // 根据库存状态筛选数据
+    const filterDataByStock = (data, filter) => {
+      if (filter === 'all' || !filter) return data;
+      
+      return data.filter(row => {
+        // 获取库存数量
+        let stock = 0;
+        if (row.children && row.children.length > 0) {
+          // 有子项（尺码明细），计算总库存
+          stock = row.children.reduce((sum, item) => sum + (item.stock || 0), 0);
+        } else {
+          stock = row.stock || 0;
+        }
+        
+        // 获取安全库存（假设每个物品有 safety_stock 字段，如果没有则默认10）
+        const safetyStock = row.safety_stock || 10;
+        
+        switch (filter) {
+          case 'normal':
+            return stock > safetyStock;
+          case 'low':
+            return stock > 0 && stock <= safetyStock;
+          case 'critical':
+            return stock === 0;
+          default:
+            return true;
+        }
+      });
+    };
+
     const fetchData = async () => {
       if (!currentWarehouseId.value) return;
       loading.value = true;
@@ -184,7 +219,9 @@ export default {
           }
         });
         if (res.code === 200) {
-          tableData.value = res.data;
+          allTableData.value = res.data;
+          // 应用筛选
+          tableData.value = filterDataByStock(res.data, currentFilter.value);
         }
       } catch (error) {
         console.error('获取数据失败:', error);
@@ -192,6 +229,16 @@ export default {
         loading.value = false;
       }
     };
+    
+    // 监听路由参数变化，重新筛选
+    watch(() => route.query.filter, (newFilter) => {
+      currentFilter.value = newFilter || 'all';
+      if (allTableData.value.length > 0) {
+        tableData.value = filterDataByStock(allTableData.value, currentFilter.value);
+      } else {
+        fetchData();
+      }
+    });
 
     watch(currentWarehouseId, (newVal) => {
       // 保存到 localStorage
@@ -279,12 +326,14 @@ export default {
       warehouseRef,
       warehouseForm,
       isGroupView,
+      currentFilter,
       getCategoryName,
       getTotalStock,
       getStockType,
       handleDelete,
       handleAddWarehouse,
-      goToInbound
+      goToInbound,
+      filterDataByStock
     };
   }
 };

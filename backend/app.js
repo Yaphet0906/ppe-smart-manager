@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 3001;
 // 检查必要的环境变量
 const corsOrigin = process.env.CORS_ORIGIN;
 if (!corsOrigin) {
-  console.error('错误: CORS_ORIGIN 环境变量未设置');
+  logger.error('CORS_ORIGIN 环境变量未设置');
   process.exit(1);
 }
 
@@ -127,9 +127,11 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 启动服务器
-app.listen(PORT, () => {
-  console.log(`后端服务器运行在：http://localhost:${PORT}`);
-});
+// 启动服务器（仅在非测试环境）
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    logger.info(`后端服务器启动`, { port: PORT, url: `http://localhost:${PORT}` });
+  });
+}
 
 module.exports = app;

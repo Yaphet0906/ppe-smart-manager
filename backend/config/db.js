@@ -2,9 +2,27 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
+// 延迟加载 logger，避免循环依赖
+let logger;
+function getLogger() {
+  if (!logger) {
+    try {
+      logger = require('./logger');
+    } catch (e) {
+      // logger 未就绪时使用 console
+    }
+  }
+  return logger;
+}
+
 // 检查必要的环境变量
 if (!process.env.DB_PASSWORD) {
-  console.error('错误: DB_PASSWORD 环境变量未设置');
+  const log = getLogger();
+  if (log) {
+    log.error('DB_PASSWORD 环境变量未设置');
+  } else {
+    console.error('错误: DB_PASSWORD 环境变量未设置');
+  }
   process.exit(1);
 }
 
@@ -22,11 +40,20 @@ const pool = mysql.createPool({
 
 // 测试连接
 async function testDbConnection() {
+  const log = getLogger();
   try {
     const [rows] = await pool.query('SELECT 1');
-    console.log('数据库连接成功');
+    if (log) {
+      log.info('数据库连接成功');
+    } else {
+      console.log('数据库连接成功');
+    }
   } catch (err) {
-    console.error('数据库连接失败：', err);
+    if (log) {
+      log.error('数据库连接失败', { error: err.message });
+    } else {
+      console.error('数据库连接失败：', err);
+    }
     process.exit(1);
   }
 }

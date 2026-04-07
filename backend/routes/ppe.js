@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
+const logger = require('../config/logger');
 const authMiddleware = require('../middleware/auth');
 const { validate, addItemSchema, inboundSchema, outboundSchema } = require('../middleware/validate');
 
@@ -79,7 +80,7 @@ router.get('/list', authMiddleware, async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('获取用品列表错误:', error);
+    logger.error('获取用品列表错误', { error: error.message, stack: error.stack });
     res.status(500).json({ code: 500, msg: '服务器错误' });
   }
 });
@@ -120,7 +121,7 @@ router.post('/add', authMiddleware, validate(addItemSchema), async (req, res) =>
     res.json({ code: 200, msg: '添加成功', data: { id: itemId } });
   } catch (error) {
     await connection.rollback();
-    console.error('添加用品错误:', error);
+    logger.error('添加用品错误', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误: ' + error.message });
   } finally {
     connection.release();
@@ -139,7 +140,7 @@ router.post('/update', authMiddleware, async (req, res) => {
     );
     res.json({ code: 200, msg: '更新成功' });
   } catch (error) {
-    console.error('更新用品错误:', error);
+    logger.error('更新用品错误', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误: ' + error.message });
   }
 });
@@ -190,7 +191,7 @@ router.delete('/delete/:id', authMiddleware, async (req, res) => {
   } catch (error) {
     await connection.rollback();
     connection.release();
-    console.error('删除用品错误:', error);
+    logger.error('删除用品错误', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误: ' + error.message });
   }
 });
@@ -249,7 +250,7 @@ router.post('/inbound', authMiddleware, validate(inboundSchema), async (req, res
       connection.release();
     }
   } catch (error) {
-    console.error('入库错误:', error);
+    logger.error('入库错误', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '入库失败: ' + error.message });
   }
 });
@@ -299,7 +300,7 @@ router.post('/outbound', authMiddleware, validate(outboundSchema), async (req, r
       connection.release();
     }
   } catch (error) {
-    console.error('出库错误:', error);
+    logger.error('出库错误', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '出库失败: ' + error.message });
   }
 });
@@ -326,7 +327,7 @@ router.get('/inbound-records', authMiddleware, async (req, res) => {
     const [rows] = await pool.query(query, params);
     res.json({ code: 200, data: rows });
   } catch (error) {
-    console.error('获取入库记录错误:', error);
+    logger.error('获取入库记录错误', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误' });
   }
 });
@@ -353,7 +354,7 @@ router.get('/outbound-records', authMiddleware, async (req, res) => {
     const [rows] = await pool.query(query, params);
     res.json({ code: 200, data: rows });
   } catch (error) {
-    console.error('获取出库记录错误:', error);
+    logger.error('获取出库记录错误', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误' });
   }
 });
@@ -396,7 +397,7 @@ router.get('/stats', authMiddleware, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('获取统计数据错误:', error);
+    logger.error('获取统计数据错误', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误' });
   }
 });
@@ -446,7 +447,7 @@ router.post('/warehouse-add', authMiddleware, async (req, res) => {
     );
     res.json({ code: 200, msg: '添加成功', data: { id: result.insertId, code } });
   } catch (error) {
-    console.error('添加仓库错误:', error);
+    logger.error('添加仓库错误', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误: ' + error.message });
   }
 });
@@ -498,7 +499,7 @@ router.get('/size-options', authMiddleware, async (req, res) => {
       data: rows.map(r => r.size_value) 
     });
   } catch (error) {
-    console.error('获取尺码选项错误:', error);
+    logger.error('获取尺码选项错误', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误' });
   }
 });
@@ -566,7 +567,7 @@ router.post('/ai-parse-note', authMiddleware, async (req, res) => {
     const aiResult = await response.json();
     
     if (aiResult.error) {
-      console.error('AI API 错误:', aiResult.error);
+      logger.error('AI API 错误', { error: aiResult.error });
       return res.json({ code: 500, msg: 'AI 识别失败' });
     }
 
@@ -582,7 +583,7 @@ router.post('/ai-parse-note', authMiddleware, async (req, res) => {
         parsedData = JSON.parse(content);
       }
     } catch (e) {
-      console.error('解析 AI 返回失败:', e);
+      logger.error('解析 AI 返回失败', { error: e.message, stack: e.stack });
       return res.json({ code: 500, msg: '识别结果解析失败' });
     }
 
@@ -611,7 +612,7 @@ router.post('/ai-parse-note', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('AI 识别错误:', error);
+    logger.error('AI 识别错误', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误' });
   }
 });

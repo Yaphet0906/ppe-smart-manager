@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const logger = require('../config/logger');
 const { validate, loginSchema, registerCompanySchema, changePasswordSchema } = require('../middleware/validate');
 const authMiddleware = require('../middleware/auth');
 
@@ -75,7 +76,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('登录失败：', error);
+    logger.error('登录失败', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误' });
   }
 });
@@ -132,7 +133,7 @@ router.post('/register-company', validate(registerCompanySchema), async (req, re
       }
     });
   } catch (error) {
-    console.error('注册失败：', error);
+    logger.error('注册失败', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误' });
   }
 });
@@ -211,7 +212,7 @@ router.post('/quick-outbound', async (req, res) => {
       connection.release();
     }
   } catch (error) {
-    console.error('领用失败：', error);
+    logger.error('领用失败', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误' });
   }
 });
@@ -238,7 +239,7 @@ router.get('/public-ppe-list', async (req, res) => {
     
     res.json({ code: 200, data: items });
   } catch (error) {
-    console.error('获取物品列表失败：', error);
+    logger.error('获取物品列表失败', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误' });
   }
 });
@@ -281,7 +282,7 @@ router.post('/change-password', authMiddleware, validate(changePasswordSchema), 
 
     res.json({ code: 200, msg: '密码修改成功' });
   } catch (error) {
-    console.error('修改密码失败：', error);
+    logger.error('修改密码失败', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误' });
   }
 });
@@ -304,7 +305,7 @@ router.get('/profile', authMiddleware, async (req, res) => {
     
     res.json({ code: 200, data: users[0] });
   } catch (error) {
-    console.error('获取用户信息错误:', error);
+    logger.error('获取用户信息错误', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误' });
   }
 });
