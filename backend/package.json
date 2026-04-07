@@ -26,7 +26,8 @@
     "winston": "^3.19.0"
   },
   "devDependencies": {
-    "eslint": "^10.2.0",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^9.39.4",
     "jest": "^30.3.0",
     "nodemon": "^3.0.1",
     "prettier": "^3.8.1",

@@ -5,6 +5,7 @@ const logger = require('../config/logger');
 const authMiddleware = require('../middleware/auth');
 const { validate, addItemSchema, inboundSchema, outboundSchema } = require('../middleware/validate');
 const { ItemQueryBuilder } = require('../utils/queryBuilder');
+const { getItemById, getItemStock, getItemList, getStats, updateItemStock } = require('../utils/dbHelpers');
 
 // 获取用品列表（支持按仓库筛选，支持分组显示，支持分页）
 router.get('/list', authMiddleware, async (req, res) => {
@@ -152,18 +153,13 @@ router.delete('/delete/:id', authMiddleware, async (req, res) => {
     const deletedBy = req.userId;
     
     // 1. 获取被删除物品的完整信息（用于记录）
-    const [items] = await connection.query(
-      'SELECT * FROM inv_items WHERE id = ? AND tenant_id = ?',
-      [itemId, tenantId]
-    );
+    const itemData = await getItemById(itemId, tenantId, { includeDeleted: false });
     
-    if (items.length === 0) {
+    if (!itemData) {
       await connection.rollback();
       connection.release();
       return res.json({ code: 404, msg: '用品不存在' });
     }
-    
-    const itemData = items[0];
     
     // 2. 执行软删除
     await connection.query(
@@ -198,16 +194,13 @@ router.post('/inbound', authMiddleware, validate(inboundSchema), async (req, res
     await connection.beginTransaction();
     try {
       // 获取物品当前库存
-      const [items] = await connection.query(
-        'SELECT quantity, warehouse_id FROM inv_items WHERE id = ? AND tenant_id = ?',
-        [item_id, req.companyId]
-      );
-      if (items.length === 0) {
+      const itemStock = await getItemStock(item_id, req.companyId);
+      if (!itemStock) {
         return res.json({ code: 400, msg: '物品不存在' });
       }
-      const beforeQty = items[0].quantity;
+      const beforeQty = itemStock.quantity;
       const afterQty = beforeQty + parseInt(quantity);
-      const itemWarehouseId = warehouse_id || items[0].warehouse_id;
+      const itemWarehouseId = warehouse_id || itemStock.warehouse_id;
 
       // 插入入库记录（新表 inv_inbound）
       const [result] = await connection.query(
@@ -256,16 +249,13 @@ router.post('/outbound', authMiddleware, validate(outboundSchema), async (req, r
     const connection = await pool.getConnection();
     await connection.beginTransaction();
     try {
-      const [items] = await connection.query(
-        'SELECT quantity, warehouse_id FROM inv_items WHERE id = ? AND tenant_id = ?',
-        [item_id, req.companyId]
-      );
-      if (items.length === 0 || items[0].quantity < quantity) {
+      const itemStock = await getItemStock(item_id, req.companyId);
+      if (!itemStock || itemStock.quantity < quantity) {
         return res.json({ code: 400, msg: '库存不足' });
       }
-      const beforeQty = items[0].quantity;
+      const beforeQty = itemStock.quantity;
       const afterQty = beforeQty - parseInt(quantity);
-      const itemWarehouseId = warehouse_id || items[0].warehouse_id;
+      const itemWarehouseId = warehouse_id || itemStock.warehouse_id;
 
       // 插入出库记录（新表 inv_outbound）
       const [result] = await connection.query(
@@ -353,43 +343,12 @@ router.get('/outbound-records', authMiddleware, async (req, res) => {
   }
 });
 
-// 获取统计数据（使用新表 inv_items）
+// 获取统计数据（使用辅助函数）
 router.get('/stats', authMiddleware, async (req, res) => {
   try {
     const { warehouse_id } = req.query;
-    let whereClause = 'WHERE tenant_id = ? AND deleted_at IS NULL';
-    let params = [req.companyId];
-    
-    if (warehouse_id && warehouse_id !== 'null' && warehouse_id !== '') {
-      whereClause += ' AND warehouse_id = ?';
-      params.push(warehouse_id);
-    }
-    
-    const [totalResult] = await pool.query(
-      `SELECT COUNT(*) as count FROM inv_items ${whereClause}`,
-      [...params]
-    );
-    const [normalResult] = await pool.query(
-      `SELECT COUNT(*) as count FROM inv_items ${whereClause} AND quantity > safety_stock`,
-      [...params]
-    );
-    const [lowResult] = await pool.query(
-      `SELECT COUNT(*) as count FROM inv_items ${whereClause} AND quantity <= safety_stock AND quantity > 0`,
-      [...params]
-    );
-    const [outResult] = await pool.query(
-      `SELECT COUNT(*) as count FROM inv_items ${whereClause} AND quantity = 0`,
-      [...params]
-    );
-    res.json({
-      code: 200,
-      data: {
-        total: totalResult[0].count,
-        normal: normalResult[0].count,
-        low: lowResult[0].count,
-        out: outResult[0].count
-      }
-    });
+    const stats = await getStats(req.companyId, { warehouseId: warehouse_id });
+    res.json({ code: 200, data: stats });
   } catch (error) {
     logger.error('获取统计数据错误', { error: error.message, stack: error.stack });
     res.json({ code: 500, msg: '服务器错误' });
@@ -507,10 +466,7 @@ router.post('/ai-parse-note', authMiddleware, async (req, res) => {
     }
 
     // 获取当前库存物品列表用于匹配
-    const [items] = await pool.query(
-      'SELECT id, name FROM inv_items WHERE tenant_id = ? AND deleted_at IS NULL',
-      [req.companyId]
-    );
+    const items = await getItemList(req.companyId);
     const itemNames = items.map(i => i.name).join('、');
 
     // 调用 Kimi API
